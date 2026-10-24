@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador cubo 8x8x8 — Taller 1</title>
+<style>
+  :root{
+    --bg:#0C1117; --panel:#141B24; --panel2:#1B2430; --line:#26313E;
+    --txt:#C9D6E2; --dim:#77858F; --led:#FF6A2B; --led-soft:#FFB48A;
+    --lcd:#A6C63C; --lcd-txt:#18220A;
+    --ejex:#FF5D5D; --ejey:#5DFF8A; --ejez:#5DA8FF;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;overscroll-behavior:none}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:14px; line-height:1.5; -webkit-text-size-adjust:100%;
+  }
+  button{
+    font:inherit; font-size:13px; color:var(--txt);
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; padding:8px 8px; cursor:pointer;
+    transition:background .12s,border-color .12s;
+  }
+  button:hover{background:var(--panel2);border-color:#33414F}
+  button:active{background:rgba(255,106,43,.18)}
+  button:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+  button[aria-pressed="true"]{background:rgba(255,106,43,.13);border-color:var(--led);color:var(--led-soft)}
+  button.mini{font-size:11.5px;padding:5px 8px;border-radius:6px}
+  input[type=range]{accent-color:var(--led);min-width:0}
+  label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--txt);cursor:pointer}
+  label.chk input{accent-color:var(--led);margin:0}
+  select{font:inherit;font-size:12.5px;color:var(--txt);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+  h1{font-size:16px;font-weight:600;margin:0;letter-spacing:.01em}
+  .sub{font-size:12px;color:var(--dim);margin:0}
+  kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--txt)}
+
+  /* ---------- estructura ---------- */
+  .app{display:grid;grid-template-columns:minmax(0,1fr) 400px;grid-template-rows:auto minmax(0,1fr);height:100vh;height:100dvh}
+  header{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;padding:9px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header .sp{flex:1}
+  .izq{display:flex;flex-direction:column;min-width:0;min-height:0}
+  aside{border-left:1px solid var(--line);overflow-y:auto;overflow-x:hidden;padding:12px 14px 24px;min-height:0;background:#0E141B}
+
+  /* ---------- escenario 3D ---------- */
+  .stage{
+    position:relative;flex:1;min-height:0;outline:none;
+    background:radial-gradient(circle at 50% 45%,#161F2B 0%,#0A0E14 80%);
+    overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;
+  }
+  .stage.arrastrando{cursor:grabbing}
+  .stage.moviendo{cursor:move}
+  .stage canvas{display:block;width:100%!important;height:100%!important}
+  .stage:fullscreen{background:#070A0E}
+  .ovl{position:absolute;display:flex;gap:6px;z-index:2}
+  .ovl.tr{top:10px;right:10px}
+  .ovl.tl{top:10px;left:12px;flex-direction:column;align-items:flex-start;gap:4px}
+  .ovl button{font-size:11.5px;padding:5px 9px;background:rgba(20,27,36,.85);border-color:var(--line);color:var(--dim);border-radius:7px;backdrop-filter:blur(4px)}
+  .ovl button:hover{color:var(--txt)}
+  .hint{position:absolute;left:12px;bottom:9px;right:12px;font-size:11px;color:#6C7B88;pointer-events:none;z-index:2}
+  .stage.jugando .leyenda{display:none}
+  .aviso{position:absolute;left:50%;top:50px;transform:translateX(-50%);max-width:calc(100% - 24px);display:none;z-index:2;pointer-events:none;
+         background:rgba(12,17,23,.9);border:1px solid var(--led);border-radius:8px;padding:6px 12px;font-size:13px;color:var(--led-soft);text-align:center}
+  .leyenda{position:absolute;right:12px;bottom:26px;font-size:10.5px;color:#6C7B88;pointer-events:none;z-index:2;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .leyenda b{font-weight:600}
+  .tip{position:absolute;pointer-events:none;display:none;z-index:3;background:rgba(12,17,23,.94);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.45;white-space:nowrap;color:var(--txt)}
+  .tip b{color:var(--led-soft)}
+  .lcdmini{display:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.12em;white-space:pre;background:var(--lcd);color:var(--lcd-txt);border:1px solid #6E8622;border-radius:5px;padding:5px 9px;line-height:1.4}
+  .stage:fullscreen .lcdmini{display:block}
+  .toque{display:none}
+  .toque.on{display:inline-block}
+
+  /* ---------- transporte ---------- */
+  .transport{display:flex;align-items:center;gap:9px;padding:8px 12px;border-top:1px solid var(--line);background:#0E141B}
+  .transport button{flex:0 0 auto;padding:6px 0;width:42px;font-size:13px}
+  .transport input[type=range]{flex:1}
+  .tick{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--dim);flex:0 0 auto;min-width:118px;text-align:right;white-space:nowrap}
+
+  /* ---------- panel derecho ---------- */
+  .lcd{
+    margin:0;background:var(--lcd);color:var(--lcd-txt);
+    border:1px solid #6E8622;border-radius:6px;padding:9px 11px;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    font-size:14px;line-height:1.45;letter-spacing:.13em;white-space:pre;
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.10);
+  }
+  .cap{font-size:11.5px;color:var(--dim);margin:5px 0 0}
+  .board{display:flex;align-items:center;gap:12px;margin:12px 0 0;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  .b1{width:34px;height:34px;border-radius:50%;padding:0;flex:0 0 auto;background:#1E4FA8;border:2px solid #5C8AE6;box-shadow:0 2px 0 #0E2A60,inset 0 -3px 0 rgba(0,0,0,.35);position:relative}
+  .b1:hover{background:#2A62C8}
+  .b1:active,.b1.presionado{transform:translateY(2px);box-shadow:0 0 0 #0E2A60,inset 0 -1px 0 rgba(0,0,0,.35)}
+  .b1 span{position:absolute;inset:6px;border-radius:50%;background:#2E6BD6;border:1px solid #7FA6F0}
+  .lds{display:flex;gap:6px;flex:0 0 auto}
+  .ld{width:11px;height:11px;border-radius:2px;background:#222B36;border:1px solid #33414F;display:block;transition:background .1s,box-shadow .1s}
+  .ld.g.on{background:#3DFF7A;box-shadow:0 0 8px #3DFF7A}
+  .ld.b.on{background:#4D9BFF;box-shadow:0 0 8px #4D9BFF}
+  .ld.r.on{background:#FF4D4D;box-shadow:0 0 8px #FF4D4D}
+  .bdtxt{font-size:11.5px;color:var(--dim);line-height:1.35;flex:1;min-width:0}
+  .bdtxt b{color:var(--txt);font-weight:600}
+  .exti{display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;padding:0 5px;border-radius:4px;border:1px solid var(--line);color:#4A5866;transition:all .1s}
+  .exti.on{border-color:var(--led);color:var(--led-soft);background:rgba(255,106,43,.15)}
+  .enlace{display:flex;align-items:center;gap:10px;margin:8px 0 0;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  .enlace button{flex:0 0 auto;font-size:12px;padding:6px 10px}
+  .enlace button:disabled{opacity:.4;cursor:not-allowed}
+  .enltxt{font-size:11.5px;color:var(--dim);line-height:1.35;flex:1;min-width:0}
+  .enltxt b{color:var(--txt);font-weight:600}
+  .punto{width:10px;height:10px;border-radius:50%;background:#33414F;flex:0 0 auto;transition:background .15s,box-shadow .15s}
+  .punto.vivo{background:#3DFF7A;box-shadow:0 0 8px #3DFF7A}
+  .punto.espera{background:#FFB020;box-shadow:0 0 6px rgba(255,176,32,.6)}
+  .punto.error{background:#FF4D4D;box-shadow:0 0 6px rgba(255,77,77,.6)}
+  .orient{display:flex;flex-wrap:wrap;align-items:center;gap:5px 12px;margin:7px 2px 0;font-size:11.5px;color:var(--dim)}
+  .orient label.chk{font-size:11.5px}
+
+  .grp{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin:14px 0 6px}
+  .seqs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .seqs button{padding:8px 4px;font-size:12.5px;position:relative}
+  .seqs button i{font-style:normal;font-size:10px;color:var(--dim);position:absolute;left:6px;top:3px}
+  .seqs button[aria-pressed="true"] i{color:var(--led)}
+  .seqs button.ancho{grid-column:1/-1}
+  #seqsTaller,#seqsExtra{grid-template-columns:repeat(6,1fr)}
+  #seqsTaller button{grid-column:span 2}
+  #seqsTaller button:nth-child(n+4){grid-column:span 3}
+  #seqsExtra button{grid-column:span 2}
+  #seqsExtra button:nth-child(-n+4){grid-column:span 3}
+  .pad{display:none;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0 0}
+  .pad.on{display:grid}
+  .pad button{font-size:12px;padding:10px 4px}
+
+  .tabs{display:flex;gap:2px;margin:16px 0 0;border-bottom:1px solid var(--line)}
+  .tabs button{flex:1;border:none;border-radius:6px 6px 0 0;background:transparent;color:var(--dim);padding:8px 2px;font-size:12.5px}
+  .tabs button:hover{background:var(--panel)}
+  .tabs button[aria-selected="true"]{color:var(--led-soft);box-shadow:inset 0 -2px 0 var(--led)}
+  .pane{display:none;padding:12px 0 0}
+  .pane.on{display:block}
+  .fila{display:flex;align-items:center;gap:9px;margin:0 0 9px;flex-wrap:wrap}
+  .fila .et{font-size:12.5px;color:var(--dim);flex:0 0 auto;min-width:74px}
+  .fila input[type=range]{flex:1;min-width:90px}
+  .fila .val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--txt);min-width:96px;text-align:right}
+  .vistas{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 10px}
+  .nota{font-size:11.5px;color:var(--dim);margin:6px 0 0;line-height:1.45}
+  .lect{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--txt);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0 0;white-space:pre;overflow-x:auto;line-height:1.55}
+  .lect b{color:var(--led-soft);font-weight:600}
+
+  /* nivel / editor */
+  .niveles{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin:0 0 10px}
+  .niveles button{padding:6px 0;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .rejilla{display:grid;grid-template-columns:22px repeat(8,1fr);gap:3px;touch-action:none;user-select:none;max-width:330px}
+  .rejilla .cab{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;color:var(--ejex);text-align:center;line-height:18px}
+  .rejilla .cy{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;color:var(--ejey);text-align:center;line-height:100%;display:flex;align-items:center;justify-content:center}
+  .rejilla .esq{font-size:9.5px;color:var(--dim);line-height:18px;text-align:center}
+  .celda{aspect-ratio:1;border-radius:5px;background:#1A2230;border:1px solid #26313E;cursor:default;transition:background .08s}
+  .celda.on{background:var(--led);border-color:#FFA06A;box-shadow:0 0 7px rgba(255,106,43,.55)}
+  .celda.piso{outline:1px dashed rgba(255,255,255,.18)}
+  .rejilla.edita .celda{cursor:pointer}
+  .rejilla.edita .celda:hover{border-color:#5B6B7C}
+  .herr{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+  .herr button{font-size:11.5px;padding:6px 8px}
+  .cuadros{display:flex;align-items:center;gap:6px;margin:10px 0 0;flex-wrap:wrap}
+  .cuadros .n{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--led-soft);min-width:64px;text-align:center}
+  .editor{display:none}
+  .editor.on{display:block}
+  textarea{width:100%;min-height:96px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--txt);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;resize:vertical}
+  .imp{display:none;margin:8px 0 0}
+  .imp.on{display:block}
+
+  /* memoria */
+  .hex{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11.5px;line-height:1.7;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow-x:auto}
+  .hex .r{display:grid;grid-template-columns:64px repeat(8,1fr);gap:2px;white-space:nowrap}
+  .hex .r.cab{color:var(--dim);font-size:10.5px}
+  .hex .r.cab span:nth-child(n+2){color:var(--ejey)}
+  .hex .r.piso{background:rgba(255,106,43,.10);border-radius:4px}
+  .hex .z{color:var(--ejez)}
+  .hex .b{text-align:center;color:#8D9BA8}
+  .hex .b.on{color:var(--led-soft)}
+
+  pre{margin:0;overflow-x:auto;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11.5px;line-height:1.6;color:#AFC0CE;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:60vh}
+  .teclas{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12.5px;align-items:center}
+  .teclas span{color:var(--dim)}
+
+  @media (max-width:900px){
+    .app{display:block;height:auto}
+    header{padding:8px 12px;gap:2px 10px}
+    header #fps{display:none}
+    .stage{flex:0 0 auto;height:54vh;height:54dvh;min-height:320px}
+    aside{border-left:none;border-top:1px solid var(--line);padding:12px 12px 28px}
+    .tick{min-width:0}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>Cubo de leds 8x8x8</h1>
+  <p class="sub" id="subt">Taller 1 — Sistemas Embebidos · NUCLEO-F746ZG</p>
+  <span class="sp"></span>
+  <p class="sub" id="fps"></p>
+</header>
+
+<section class="izq">
+  <div class="stage" id="stage" tabindex="0" aria-label="Vista 3D del cubo">
+    <div class="ovl tl"><div class="lcdmini" id="lcdmini"> </div></div>
+    <div class="ovl tr">
+      <button class="toque" id="btToque" title="Qué hace un dedo en TOCAR">un dedo: esfera</button>
+      <button id="btCentrar" title="Volver a la vista inicial (R)">centrar</button>
+      <button id="btFull" title="Pantalla completa (F)">&#x26F6;</button>
+    </div>
+    <div class="leyenda" id="leyenda"><b style="color:var(--ejex)">X</b> columna · <b style="color:var(--ejey)">Y</b> fila · <b style="color:var(--ejez)">Z</b> nivel</div>
+    <div class="hint" id="hint"></div>
+    <div class="aviso" id="aviso" role="status"></div>
+    <div class="tip" id="tip"></div>
+  </div>
+  <div class="transport">
+    <button id="atras" title="Un cuadro atrás (,)">&#9664;&#9664;</button>
+    <button id="play" aria-label="Pausar" title="Pausar / reproducir (espacio)">&#10074;&#10074;</button>
+    <button id="adelante" title="Un cuadro adelante (.)">&#9654;&#9654;</button>
+    <input type="range" id="speed" min="40" max="400" value="140" step="10" aria-label="Velocidad">
+    <span class="tick" id="tick">f 0</span>
+  </div>
+</section>
+
+<aside>
+  <div class="lcd" id="lcd"> </div>
+  <p class="cap" id="cap">Así se va a ver la LCD 16x2 en esta secuencia.</p>
+
+  <div class="board">
+    <button class="b1" id="b1" title="Pulsador B1 (PC13) → interrupción EXTI13 (B)"><span></span></button>
+    <div class="lds" title="Leds de la tarjeta: número de secuencia en binario (LD3 LD2 LD1)">
+      <i class="ld r" id="ld3"></i><i class="ld b" id="ld2"></i><i class="ld g" id="ld1"></i>
+    </div>
+    <div class="bdtxt"><b>B1</b> cambia la secuencia (1→5) <span class="exti" id="exti">EXTI13</span><br>
+      <label class="chk" style="margin-top:3px"><input type="checkbox" id="ciclo"> pulsar solo cada 8 s (modo demo)</label>
+    </div>
+  </div>
+  <div class="enlace">
+    <i class="punto" id="enlPunto"></i>
+    <div class="enltxt"><b id="enlEstado">Cubo físico: sin conectar</b><br><span id="enlDetalle">Cable USB en CN1 (ST-LINK) · 115200 baudios · firmware CuboSerial</span></div>
+    <button id="btCubo" title="Mostrar esto en el cubo real, por el puerto COM del ST-LINK (Web Serial)">Conectar cubo</button>
+  </div>
+  <div class="orient" title="Solo cambia lo que se manda al cubo; la vista 3D sigue igual. Párate frente al cubo, pon la vista Frente y la secuencia ECCI, y marca hasta que en el cubo las letras se lean derechas y se alejen de ti como en la pantalla.">
+    <span>Orientación en el cubo:</span>
+    <label class="chk"><input type="checkbox" id="oriXY"> x↔y</label>
+    <label class="chk"><input type="checkbox" id="oriX"> invertir x</label>
+    <label class="chk"><input type="checkbox" id="oriY"> invertir y</label>
+    <label class="chk"><input type="checkbox" id="oriZ"> invertir z</label>
+  </div>
+
+  <div class="grp">Las cinco del taller</div>
+  <div class="seqs" id="seqsTaller"></div>
+  <div class="grp">Extras</div>
+  <div class="seqs" id="seqsExtra"></div>
+  <div class="grp">Tuya</div>
+  <div class="seqs" id="seqsTuya"></div>
+  <div class="pad" id="pad"></div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="vista" aria-selected="true">Vista</button>
+    <button role="tab" data-tab="nivel" aria-selected="false">Nivel</button>
+    <button role="tab" data-tab="mem" aria-selected="false">Memoria</button>
+    <button role="tab" data-tab="cod" aria-selected="false">Código</button>
+    <button role="tab" data-tab="cables" aria-selected="false">Cables</button>
+    <button role="tab" data-tab="teclas" aria-selected="false">Teclas</button>
+  </div>
+
+  <!-- ---------- VISTA ---------- -->
+  <div class="pane on" id="pane-vista">
+    <div class="vistas">
+      <button class="mini" data-vista="iso">Isométrica</button>
+      <button class="mini" data-vista="frente">Frente</button>
+      <button class="mini" data-vista="lado">Lado</button>
+      <button class="mini" data-vista="arriba">Arriba</button>
+    </div>
+    <div class="fila">
+      <span class="et">Led</span>
+      <select id="color">
+        <option value="naranja">naranja</option>
+        <option value="rojo">rojo</option>
+        <option value="verde">verde</option>
+        <option value="azul">azul</option>
+        <option value="blanco">blanco</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="ejes" checked> ejes</label>
+      <label class="chk"><input type="checkbox" id="apagados" checked> leds apagados</label>
+      <label class="chk"><input type="checkbox" id="giraSolo"> girar solo</label>
+    </div>
+    <div class="fila" style="margin-top:12px">
+      <label class="chk"><input type="checkbox" id="barrido"> <b>ver el barrido de pisos</b> (multiplexado)</label>
+    </div>
+    <div class="fila">
+      <span class="et">ms por piso</span>
+      <input type="range" id="msPiso" min="0" max="100" value="0">
+      <span class="val" id="msPisoVal">2 ms · 62 Hz</span>
+    </div>
+    <div class="lect" id="lectBarrido">activa el barrido para ver cómo se refresca el cubo</div>
+    <p class="nota">El cubo real nunca tiene los 8 pisos encendidos a la vez: el SysTick apaga un piso, escribe los 8 bytes de columnas y enciende el siguiente. A 2 ms por piso el ojo ve el cubo completo; sube el tiempo y verás lo que vería una cámara lenta.</p>
+  </div>
+
+  <!-- ---------- NIVEL ---------- -->
+  <div class="pane" id="pane-nivel">
+    <div class="niveles" id="niveles"></div>
+    <p class="nota" id="pisoInfo" style="margin:0 0 8px"></p>
+    <div class="rejilla" id="rejilla"></div>
+    <p class="nota" id="notaNivel">Corte del nivel z seleccionado, en vivo: cada fila de la rejilla es un byte de <code>cubo[z][y]</code> y cada columna x es un bit. Elige <b>DIBUJAR</b> para pintar aquí tus propios cuadros.</p>
+    <div class="editor" id="editor">
+      <div class="cuadros">
+        <button class="mini" id="cAnt" title="Cuadro anterior">&#9664;</button>
+        <span class="n" id="cNum">1 / 1</span>
+        <button class="mini" id="cSig" title="Cuadro siguiente">&#9654;</button>
+        <button class="mini" id="cNuevo" title="Agregar un cuadro vacío después de este">+ nuevo</button>
+        <button class="mini" id="cDup" title="Duplicar este cuadro">duplicar</button>
+        <button class="mini" id="cBorrar" title="Borrar este cuadro">borrar</button>
+      </div>
+      <div class="herr">
+        <button id="hLimpiarN">limpiar nivel</button>
+        <button id="hLlenarN">llenar nivel</button>
+        <button id="hInvertirN">invertir nivel</button>
+        <button id="hSubir" title="Copiar este nivel al nivel de arriba">copiar arriba ↑</button>
+        <button id="hLimpiarC">limpiar cuadro</button>
+        <button id="hCopiar" title="Copiar el arreglo en C al portapapeles">copiar C</button>
+        <button id="hImportar" title="Pegar un arreglo en C para cargarlo">importar C</button>
+      </div>
+      <div class="imp" id="imp">
+        <textarea id="impTxt" placeholder="Pega aquí el arreglo CUADROS[...] (o cualquier lista de bytes 0x..): se leen de 64 en 64 bytes, nivel por nivel."></textarea>
+        <div class="herr"><button id="impOk">cargar</button><button id="impNo">cancelar</button><span class="nota" id="impMsg"></span></div>
+      </div>
+      <p class="nota">También puedes hacer clic directo sobre un led en la vista 3D. Con varios cuadros, reproducir los pasa a la velocidad del deslizador. El código en C se genera en la pestaña <b>Código</b>.</p>
+    </div>
+  </div>
+
+  <!-- ---------- MEMORIA ---------- -->
+  <div class="pane" id="pane-mem">
+    <div class="hex" id="hex"></div>
+    <p class="nota">Esto es exactamente lo que hay en <code>uint8_t cubo[8][8]</code> ahora mismo: un byte por fila y, dentro del byte, el bit 0 es la columna x=0 y el bit 7 la columna x=7. La rutina de refresco escribe estos 8 bytes en el bus de columnas mientras tiene encendido el piso z (en el montaje con 74HCT245 + 2N2907 la columna va invertida: 0 enciende).</p>
+  </div>
+
+  <!-- ---------- CÓDIGO ---------- -->
+  <div class="pane" id="pane-cod">
+    <div class="herr" style="margin:0 0 8px"><button id="copiarCod">copiar</button><span class="nota" id="copiadoMsg" style="margin:0"></span></div>
+    <pre id="code"></pre>
+    <p class="nota">Los leds apagados se ven como puntos oscuros, igual que en el cubo real. El barrido de niveles va aparte, en la rutina de refresco (SysTick).</p>
+  </div>
+
+  <!-- ---------- CABLES (cubo físico de William) ---------- -->
+  <div class="pane" id="pane-cables">
+    <p class="nota" style="margin:0 0 8px">Contrato del cubo físico (viernes, versión 2): cada <b>tira</b> de 8 hilos es una fila <span style="color:var(--ejey)">y</span>; dentro de la tira, la columna <span style="color:var(--ejex)">x</span> es el número de William en la madera menos uno (columna 1 = x0). Cada <b>tierra</b> es un piso <span style="color:var(--ejez)">z</span> y va a la pata central de un MOSFET; el <b>MOSFET 1 es el piso de arriba</b> (medido el 18/09), así que MOSFET = 8 − z. Pasa el mouse por un led en la vista 3D y el tooltip te dice tira, columna, baquela, banco y pin del STM.</p>
+    <div class="hex" style="padding:6px 10px">
+      <div class="r cab" style="grid-template-columns:44px 1fr 1fr"><span>fila</span><span>baquela · banco</span><span>pines STM x0…x7</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">y=7</span><span>baquela 2 · banco 4</span><span class="b" style="text-align:left">PF8-15</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">y=6</span><span>baquela 2 · banco 3</span><span class="b" style="text-align:left">PF0-7</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">y=5</span><span>baquela 2 · banco 2</span><span class="b" style="text-align:left">PE8-15</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">y=4</span><span>baquela 2 · banco 1</span><span class="b" style="text-align:left">PE0-7</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">y=3</span><span>baquela 1 · banco 4</span><span class="b" style="text-align:left">PB1-6, PB10, PB11</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">y=2</span><span>baquela 1 · banco 3</span><span class="b" style="text-align:left">PC6-12, PB15</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">y=1</span><span>baquela 1 · banco 2</span><span class="b" style="text-align:left">PG0-5, PG8, PG9</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">y=0</span><span>baquela 1 · banco 1</span><span class="b" style="text-align:left">PD0-7</span></div>
+    </div>
+    <div class="hex" style="padding:6px 10px;margin-top:8px">
+      <div class="r cab" style="grid-template-columns:44px 1fr 1fr"><span>piso</span><span>tierra → MOSFET · U9</span><span>pin STM</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">z=7</span><span>MOSFET 1 · U9 A1 (pin 2)</span><span class="b" style="text-align:left">PD10</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">z=6</span><span>MOSFET 2 · U9 A2 (pin 3)</span><span class="b" style="text-align:left">PD11</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">z=5</span><span>MOSFET 3 · U9 A3 (pin 4)</span><span class="b" style="text-align:left">PD12</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">z=4</span><span>MOSFET 4 · U9 A4 (pin 5)</span><span class="b" style="text-align:left">PD13</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">z=3</span><span>MOSFET 5 · U9 A5 (pin 6)</span><span class="b" style="text-align:left">PD14</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">z=2</span><span>MOSFET 6 · U9 A6 (pin 7)</span><span class="b" style="text-align:left">PD15</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">z=1</span><span>MOSFET 7 · U9 A7 (pin 8)</span><span class="b" style="text-align:left">PG10</span></div>
+      <div class="r" style="grid-template-columns:44px 1fr 1fr"><span class="z">z=0</span><span>MOSFET 8 · U9 A8 (pin 9)</span><span class="b" style="text-align:left">PG12</span></div>
+    </div>
+    <p class="nota">Enlace con el simulador (firmware <code>CuboSerial</code>): USART3 en <b>PD8</b> (TX) y <b>PD9</b> (RX), que la Nucleo ya lleva al ST-LINK, así que viaja por el mismo cable USB de CN1. Esos dos pines quedan libres en la organizadora.</p>
+    <p class="nota">Modo prueba del firmware: B1 presionado al arrancar. Recorre columnas x, filas y y pisos z de a un plano (700 ms), con el índice en los leds de la tarjeta y en la LCD. Si en X=0 prende la columna 8 de William, esa tira está al revés: girar el conector o invertir esa fila de <code>COL_PIN</code>.</p>
+  </div>
+
+  <!-- ---------- TECLAS ---------- -->
+  <div class="pane" id="pane-teclas">
+    <div class="teclas">
+      <kbd>arrastrar</kbd><span>girar</span>
+      <kbd>shift + arrastrar</kbd><span>desplazar (también botón derecho o rueda presionada)</span>
+      <kbd>rueda</kbd><span>zoom</span>
+      <kbd>doble clic</kbd><span>centrar la vista</span>
+      <kbd>&#8592; &#8593; &#8594; &#8595;</kbd><span>girar (con shift: desplazar)</span>
+      <kbd>+ / -</kbd><span>acercar / alejar</span>
+      <kbd>R</kbd><span>vista inicial</span>
+      <kbd>espacio</kbd><span>pausar / reproducir</span>
+      <kbd>, / .</kbd><span>un cuadro atrás / adelante</span>
+      <kbd>B</kbd><span>pulsador B1 (siguiente secuencia del taller)</span>
+      <kbd>1 … 9, 0</kbd><span>elegir secuencia</span>
+      <kbd>D</kbd><span>DIBUJAR</span>
+      <kbd>M</kbd><span>ver / ocultar el barrido</span>
+      <kbd>F</kbd><span>pantalla completa</span>
+      <kbd>1 dedo</kbd><span>girar (en TOCAR: mover la esfera)</span>
+      <kbd>2 dedos</kbd><span>zoom y desplazar · doble toque: centrar</span>
+    </div>
+    <p class="nota"><b>SNAKE</b>: basta mover para jugar tú. Las teclas van según la cámara, redondeada al lado más cercano del cubo; con la vista de juego es el frente, igual que el cubo físico mirado de frente.</p>
+    <div class="teclas" style="margin-top:6px">
+      <kbd>↑ &nbsp;W</kbd><span>alejarse (hacia adentro del cubo)</span>
+      <kbd>↓ &nbsp;S</kbd><span>acercarse</span>
+      <kbd>← &nbsp;A</kbd><span>izquierda</span>
+      <kbd>→ &nbsp;D</kbd><span>derecha</span>
+      <kbd>E &nbsp;Espacio</kbd><span>subir</span>
+      <kbd>Q &nbsp;Shift</kbd><span>bajar</span>
+      <kbd>P</kbd><span>pausa (se pausa sola si cambias de ventana)</span>
+      <kbd>Enter</kbd><span>otra partida</span>
+    </div>
+    <p class="nota">Dos teclas seguidas se cumplen en orden, un paso cada una; la reversa se ignora. La culebra arranca enrollada y sale hacia donde digas. Cada comida la acelera un 3 %; el deslizador de velocidad la hace más lenta o más rápida.</p>
+  </div>
+</aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+/* =====================================================================
+   1. Memoria de imagen y secuencias (misma lógica que el firmware)
+   ===================================================================== */
+const NOMBRES = ["PLANOS","LLUVIA","CUBO","ESPIRAL","ONDA","TOCAR","SNAKE",
+                 "PENDULO","FUEGO","ESFERA","HELICE","ECCI","DIBUJAR"];
+const TOCAR=5, SNAKE=6, DIB=12, N_TALLER=5;
+const $ = id => document.getElementById(id);
+const buf = new Uint8Array(64);                 /* buf[z*8+y], bit x  ==  cubo[z][y] */
+function limpiar(){ buf.fill(0); }
+function led(x,y,z){ if(x>=0&&x<8&&y>=0&&y<8&&z>=0&&z<8) buf[z*8+y] |= (1<<x); }
+const lim = (v,a,b)=> v<a?a:(v>b?b:v);
+
+let gotas = [];
+const PX = [0,1,2,3,4,5,6,7, 7,7,7,7,7,7,7, 6,5,4,3,2,1,0, 0,0,0,0,0,0];
+const PY = [0,0,0,0,0,0,0,0, 1,2,3,4,5,6,7, 7,7,7,7,7,7,7, 6,5,4,3,2,1];
+const SEN = [4,5,6,7,7,7,6,5,4,2,1,0,0,0,1,2];
+
+function planos(f){
+  limpiar(); f = f % 48;
+  const eje=(f/16)|0, s=f%16, p = s<8 ? s : 15-s;
+  for(let a=0;a<8;a++) for(let b=0;b<8;b++){
+    if(eje===0) led(a,b,p); else if(eje===1) led(a,p,b); else led(p,a,b);
+  }
+}
+function lluvia(){
+  limpiar();
+  const vivas=[];
+  for(const g of gotas){ if(g.z>0){ g.z--; vivas.push(g); } }
+  gotas=vivas;
+  if(gotas.length<14) gotas.push({x:(Math.random()*8)|0,y:(Math.random()*8)|0,z:7});
+  for(const g of gotas) led(g.x,g.y,g.z);
+}
+function cuboExp(f){
+  limpiar();
+  const tam=[0,1,2,3,2,1];
+  const s=tam[((f/2)|0)%6], lo=3-s, hi=4+s;
+  for(let x=lo;x<=hi;x++) for(let y=lo;y<=hi;y++) for(let z=lo;z<=hi;z++){
+    if(x===lo||x===hi||y===lo||y===hi||z===lo||z===hi) led(x,y,z);
+  }
+}
+function espiral(f){
+  limpiar();
+  for(let z=0;z<8;z++){ const i=(f+z*3)%28; led(PX[i],PY[i],z); }
+}
+function onda(f){
+  limpiar();
+  for(let x=0;x<8;x++) for(let y=0;y<8;y++) led(x,y,SEN[(x+y+f)&15]);
+}
+
+const obj={x:3.5,y:3.5,z:5.5,vx:0,vy:0,vz:0};
+let agarrado=false;
+function tocar(){
+  limpiar();
+  if(!agarrado){
+    obj.vz -= 0.055;
+    obj.x+=obj.vx; obj.y+=obj.vy; obj.z+=obj.vz;
+    if(obj.z<1.2){ obj.z=1.2; obj.vz*=-0.62; obj.vx*=.9; obj.vy*=.9; }
+    if(obj.x<1.2){ obj.x=1.2; obj.vx*=-0.7; }
+    if(obj.x>5.8){ obj.x=5.8; obj.vx*=-0.7; }
+    if(obj.y<1.2){ obj.y=1.2; obj.vy*=-0.7; }
+    if(obj.y>5.8){ obj.y=5.8; obj.vy*=-0.7; }
+    if(obj.z>6.8){ obj.z=6.8; obj.vz*=-0.7; }
+  }
+  for(let x=0;x<8;x++) for(let y=0;y<8;y++) for(let z=0;z<8;z++){
+    const dx=x-obj.x, dy=y-obj.y, dz=z-obj.z;
+    if(dx*dx+dy*dy+dz*dz <= 2.6) led(x,y,z);
+  }
+}
+
+/* ---- SNAKE 3D ---- */
+let sn=[], sdx=1, sdy=0, sdz=0, comida={x:6,y:3,z:3}, muerto=false, muerteT=0, tickJuego=0, auto=true;
+let vidas=0, comidas=0, torpeza=0.55;
+/* Jugando tú: la culebra espera enrollada hasta la primera tecla; los giros van a una cola de 2 (dos teclas
+   rápidas = dos giros seguidos, nunca una reversa encima de sí misma); la velocidad sube al comer. */
+let colaDir=[], esperando=false, record=0, nuevoRecord=false;
+try{ record=+localStorage.getItem('cubo.snakeRecord')||0; }catch(e){}
+function snakeReset(){
+  if(auto){ sn=[{x:3,y:3,z:3},{x:2,y:3,z:3},{x:1,y:3,z:3}]; esperando=false; }
+  else    { sn=[{x:3,y:3,z:3},{x:3,y:3,z:3},{x:3,y:3,z:3}]; esperando=true; }   /* enrollada: sale hacia donde digas */
+  sdx=1; sdy=0; sdz=0; colaDir=[]; muerto=false; nuevoRecord=false; comidas=0; nuevaComida();
+}
+function nuevaComida(){
+  const b=bloqueo(), libres=[];
+  for(let c=0;c<512;c++) if(!b[c]) libres.push(c);
+  if(!libres.length) return;                             /* cubo lleno */
+  const c=libres[(Math.random()*libres.length)|0];
+  comida={x:c%8, y:((c/8)|0)%8, z:(c/64)|0};
+}
+function dirSnake(dx,dy,dz){
+  if(muerto) return;
+  if(esperando){                                         /* primera tecla: arranca ya, hacia donde sea */
+    sdx=dx; sdy=dy; sdz=dz; colaDir=[]; esperando=false; tickJuego=-1e9; return;
+  }
+  const u=colaDir.length ? colaDir[colaDir.length-1] : [sdx,sdy,sdz];
+  if(dx===u[0]&&dy===u[1]&&dz===u[2]) return;            /* la misma dirección: nada */
+  if(dx===-u[0]&&dy===-u[1]&&dz===-u[2]) return;         /* reversa: se ignora */
+  if(colaDir.length<2) colaDir.push([dx,dy,dz]);
+}
+const VEC=[];
+for(let c=0;c<512;c++){
+  const x=c%8, y=((c/8)|0)%8, z=(c/64)|0, v=[];
+  if(x>0)v.push(c-1); if(x<7)v.push(c+1);
+  if(y>0)v.push(c-8); if(y<7)v.push(c+8);
+  if(z>0)v.push(c-64); if(z<7)v.push(c+64);
+  VEC.push(v);
+}
+const ic=s=>s.z*64+s.y*8+s.x;
+function bloqueo(){ const b=new Uint8Array(512); for(const s of sn) b[ic(s)]=1; return b; }
+function ruta(ini,fin,b){
+  const prev=new Int16Array(512).fill(-1), vis=new Uint8Array(512), q=[ini];
+  vis[ini]=1;
+  for(let k=0;k<q.length;k++){
+    const c=q[k];
+    if(c===fin) break;
+    for(const n of VEC[c]) if(!vis[n]&&!b[n]){ vis[n]=1; prev[n]=c; q.push(n); }
+  }
+  if(!vis[fin]) return null;
+  const p=[]; let c=fin;
+  while(c!==ini){ p.push(c); c=prev[c]; }
+  return p.reverse();
+}
+function espacio(ini,b){
+  const vis=new Uint8Array(512), q=[ini]; vis[ini]=1; let n=1;
+  for(let k=0;k<q.length;k++)
+    for(const m of VEC[q[k]]) if(!vis[m]&&!b[m]){ vis[m]=1; n++; q.push(m); }
+  return n;
+}
+function fijar(n){
+  sdx=(n%8)-sn[0].x;
+  sdy=(((n/8)|0)%8)-sn[0].y;
+  sdz=((n/64)|0)-sn[0].z;
+}
+function codicioso(b){
+  const h=sn[0], op=[];
+  if(comida.x!==h.x) op.push([Math.sign(comida.x-h.x),0,0]);
+  if(comida.y!==h.y) op.push([0,Math.sign(comida.y-h.y),0]);
+  if(comida.z!==h.z) op.push([0,0,Math.sign(comida.z-h.z)]);
+  op.sort(()=>Math.random()-.5);
+  for(const o of op){
+    const n=ic({x:h.x+o[0],y:h.y+o[1],z:h.z+o[2]});
+    if(!b[n]) return n;
+  }
+  const libres=VEC[ic(h)].filter(n=>!b[n]);
+  return libres.length ? libres[(Math.random()*libres.length)|0] : null;
+}
+const SEIS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+function pensar(){
+  const cab=ic(sn[0]), col=ic(sn[sn.length-1]), b=bloqueo();
+  if(Math.random() < torpeza*0.05){     /* se equivoco de tecla, puede matarse */
+    const o=SEIS[(Math.random()*6)|0];
+    sdx=o[0]; sdy=o[1]; sdz=o[2];
+    return;
+  }
+  if(Math.random() < torpeza){          /* todavia no calcula, solo persigue */
+    const n=codicioso(b);
+    if(n!==null) fijar(n);
+    return;
+  }
+  let elegido=null;
+  const p=ruta(cab,ic(comida),b);
+  if(p&&p.length){
+    const b2=b.slice(); b2[p[0]]=1; b2[col]=0;
+    if(ruta(p[0],col,b2)) elegido=p[0];  /* solo si despues alcanza su cola */
+  }
+  if(elegido===null){                    /* si no, buscar el hueco mas grande */
+    let mejor=-1;
+    for(const n of VEC[cab]){
+      if(b[n]) continue;
+      const b2=b.slice(); b2[n]=1; b2[col]=0;
+      const e=espacio(n,b2);
+      if(e>mejor){ mejor=e; elegido=n; }
+    }
+  }
+  if(elegido!==null) fijar(elegido);
+}
+function morir(){
+  muerto=true; muerteT=performance.now();
+  if(auto){
+    vidas++;
+    torpeza=Math.max(0.03, 0.55*Math.pow(0.68,vidas));  /* cada vida aprende */
+  }else if(sn.length>record && comidas>0){             /* récord solo si comió algo */
+    record=sn.length; nuevoRecord=true;
+    try{ localStorage.setItem('cubo.snakeRecord',record); }catch(e){}
+  }
+  verLCD();
+}
+function snakeTick(){
+  if(muerto || esperando) return;
+  if(auto) pensar();
+  else if(colaDir.length){ const d=colaDir.shift(); sdx=d[0]; sdy=d[1]; sdz=d[2]; }
+  const h=sn[0], nx=h.x+sdx, ny=h.y+sdy, nz=h.z+sdz;
+  if(nx<0||nx>7||ny<0||ny>7||nz<0||nz>7){ morir(); return; }
+  for(let i=0;i<sn.length-1;i++)
+    if(sn[i].x===nx&&sn[i].y===ny&&sn[i].z===nz){ morir(); return; }
+  sn.unshift({x:nx,y:ny,z:nz});
+  if(nx===comida.x&&ny===comida.y&&nz===comida.z){ comidas++; nuevaComida(); }
+  else sn.pop();
+  verLCD();
+}
+let cabezaIdx=-1, comidaIdx=-1;                         /* para pintarlas de otro color y con sombra en la vista 3D */
+function snakeDibuja(t){
+  limpiar();
+  if(muerto){
+    const e=((t-muerteT)/110)|0;
+    if(e<4){ if(e%2===0) buf.fill(0xFF); return; }      /* dos destellos */
+    if(auto){ snakeReset(); verLCD(); return; }
+    for(let i=1;i<sn.length;i++) led(sn[i].x,sn[i].y,sn[i].z);   /* jugando tú: queda quieta hasta Enter */
+    if(((t/130)|0)%2===0) led(sn[0].x,sn[0].y,sn[0].z);
+    cabezaIdx=ic(sn[0]);
+    return;
+  }
+  for(let i=1;i<sn.length;i++) led(sn[i].x,sn[i].y,sn[i].z);
+  const h=sn[0];
+  /* cabeza: casi siempre encendida, con una caída corta que la distingue del cuerpo; esperando: parpadeo lento */
+  if(esperando ? ((t/350)|0)%2===0 : (t%600)>90) led(h.x,h.y,h.z);
+  if(((t/150)|0)%2===0) led(comida.x,comida.y,comida.z);  /* comida: parpadeo rápido */
+  cabezaIdx=ic(h); comidaIdx=ic(comida);
+}
+
+function pendulo(f){
+  limpiar();
+  const ARCO=[0,1,2,3,4,4,3,2,1,0];
+  const t=f%40;
+  let lado=-1, h=0;
+  if(t<10){ lado=0; h=ARCO[t]; }
+  else if(t>=20 && t<30){ lado=7; h=ARCO[t-20]; }
+  for(let x=0;x<8;x++){
+    const z = (x===lado) ? 1+h : 1;
+    for(let s=z+2;s<=7;s++) led(x,3,s);
+    led(x,3,z); led(x,4,z); led(x,3,z+1); led(x,4,z+1);
+  }
+}
+function llama(){
+  limpiar();
+  for(let z=0;z<8;z++) for(let y=0;y<8;y++) for(let x=0;x<8;x++)
+    if(((Math.random()*9)|0) > z+1) led(x,y,z);
+}
+function esferaExp(f){
+  limpiar();
+  const R4=[4,16,36,64,100,144];
+  const r4=R4[f%6];
+  for(let x=0;x<8;x++) for(let y=0;y<8;y++) for(let z=0;z<8;z++){
+    const a=2*x-7, b=2*y-7, c=2*z-7;
+    if(Math.abs(a*a+b*b+c*c-r4) <= 14) led(x,y,z);
+  }
+}
+function helice(f){
+  limpiar();
+  const i=f%28, j=(i+14)%28;
+  const x0=PX[i], y0=PY[i], x1=PX[j], y1=PY[j];
+  for(let k=0;k<=7;k++){
+    const x=((x0*(7-k)+x1*k+3)/7)|0, y=((y0*(7-k)+y1*k+3)/7)|0;
+    for(let z=0;z<8;z++) led(x,y,z);
+  }
+}
+const LETRA=[[0x7E,0x60,0x60,0x7C,0x60,0x60,0x7E,0x00],
+             [0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00],
+             [0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00],
+             [0x3C,0x18,0x18,0x18,0x18,0x18,0x3C,0x00]];
+function texto(f){
+  limpiar();
+  const paso=f%40, li=(paso/10)|0, y=7-(paso%10);
+  if(y<0) return;
+  const g=LETRA[li];
+  for(let r=0;r<8;r++) for(let x=0;x<8;x++)
+    if((g[r]>>(7-x))&1) led(x,y,7-r);
+}
+
+/* ---- DIBUJAR: cuadros propios ---- */
+let cuadros=[new Uint8Array(64)], cIdx=0, nivelSel=0;
+function dibujo(){ buf.set(cuadros[cIdx]); }
+
+const SECUENCIAS=[planos,lluvia,cuboExp,espiral,onda,tocar,null,pendulo,llama,esferaExp,helice,texto,dibujo];
+
+/* =====================================================================
+   2. Escena 3D
+   ===================================================================== */
+const stage=$('stage');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(42,1,0.1,200);
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+stage.appendChild(renderer.domElement);
+function resize(){
+  const w=stage.clientWidth,h=stage.clientHeight;
+  if(!w||!h) return;
+  renderer.setSize(w,h);            /* con estilo: así el canvas nunca queda desfasado en pantallas con escala >100 % */
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+if(window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+addEventListener('resize',resize);
+
+const grupo=new THREE.Group(); scene.add(grupo);
+/* mundo: X = x-3.5 ; arriba (Y mundo) = z-3.5 ; profundidad (Z mundo) = y-3.5 */
+const pos=new Float32Array(512*3);
+for(let z=0;z<8;z++) for(let y=0;y<8;y++) for(let x=0;x<8;x++){
+  const i=(z*64+y*8+x)*3; pos[i]=x-3.5; pos[i+1]=z-3.5; pos[i+2]=y-3.5;
+}
+const attrPos=new THREE.BufferAttribute(pos,3);
+const colCore=new Float32Array(512*3), colHalo=new Float32Array(512*3);
+const attrCore=new THREE.BufferAttribute(colCore,3);
+const attrHalo=new THREE.BufferAttribute(colHalo,3);
+function sprite(){
+  const c=document.createElement('canvas'); c.width=c.height=64;
+  const ctx=c.getContext('2d');
+  const g=ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,1)');
+  g.addColorStop(.45,'rgba(255,255,255,.55)');
+  g.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const tex=sprite();
+const gCore=new THREE.BufferGeometry();
+gCore.setAttribute('position',attrPos); gCore.setAttribute('color',attrCore);
+const matCore=new THREE.PointsMaterial({size:.5,vertexColors:true,map:tex,transparent:true,depthWrite:false});
+const pCore=new THREE.Points(gCore,matCore);
+pCore.renderOrder=1; grupo.add(pCore);
+const gHalo=new THREE.BufferGeometry();
+gHalo.setAttribute('position',attrPos); gHalo.setAttribute('color',attrHalo);
+const pHalo=new THREE.Points(gHalo,new THREE.PointsMaterial({size:1.5,vertexColors:true,map:tex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+pHalo.renderOrder=2; grupo.add(pHalo);
+grupo.add(new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(8,8,8)),
+  new THREE.LineBasicMaterial({color:0x223040,transparent:true,opacity:.7})
+));
+
+/* ejes con nombre: X (columna), Y (fila), Z (nivel) */
+const ejes=new THREE.Group(); grupo.add(ejes);
+function etiqueta(txt,color){
+  const c=document.createElement('canvas'); c.width=128; c.height=64;
+  const ctx=c.getContext('2d');
+  ctx.font='bold 46px ui-sans-serif,system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle=color; ctx.fillText(txt,64,34);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthTest:false}));
+  s.scale.set(1.5,.75,1); return s;
+}
+(function(){
+  const o=new THREE.Vector3(-4.4,-4.4,-4.4), L=9.2;
+  const def=[ [new THREE.Vector3(L,0,0),'#FF5D5D','X'],
+              [new THREE.Vector3(0,0,L),'#5DFF8A','Y'],
+              [new THREE.Vector3(0,L,0),'#5DA8FF','Z'] ];
+  for(const [d,col,n] of def){
+    const g=new THREE.BufferGeometry().setFromPoints([o, o.clone().add(d)]);
+    ejes.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:col,transparent:true,opacity:.75})));
+    const e=etiqueta(n,col); e.position.copy(o).add(d).add(d.clone().normalize().multiplyScalar(.9)); ejes.add(e);
+    /* marca 7 en la punta de cada eje */
+    const m=etiqueta('7','#7C8A97'); m.scale.set(.9,.45,1);
+    m.position.copy(o).add(d.clone().normalize().multiplyScalar(7.9));
+    m.position.add((n==='Z')? new THREE.Vector3(-.55,0,0) : new THREE.Vector3(0,-.55,0));
+    ejes.add(m);
+  }
+  const cero=etiqueta('0','#7C8A97'); cero.scale.set(.9,.45,1);
+  cero.position.copy(o).add(new THREE.Vector3(-.35,-.45,-.35)); ejes.add(cero);
+})();
+
+/* plano que marca el piso activo en el barrido */
+const pisoMesh=new THREE.Mesh(new THREE.PlaneGeometry(8.7,8.7),
+  new THREE.MeshBasicMaterial({color:0xFF6A2B,transparent:true,opacity:.13,side:THREE.DoubleSide,depthWrite:false}));
+pisoMesh.rotation.x=-Math.PI/2; pisoMesh.visible=false; grupo.add(pisoMesh);
+
+/* SNAKE: sombras en el piso bajo la cabeza y la comida (solo en pantalla, no van al cubo): dicen si están
+   en la misma fila o columna aunque estén a distinta altura */
+function sombra(color){
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(.78,.78),
+    new THREE.MeshBasicMaterial({color,transparent:true,opacity:.5,side:THREE.DoubleSide,depthWrite:false}));
+  m.rotation.x=-Math.PI/2; m.visible=false; grupo.add(m); return m;
+}
+const sombraCabeza=sombra(0x5FE3FF), sombraComida=sombra(0x5DFF7A);
+function ponerSombra(m,idx,rgb){
+  m.visible = idx>=0;
+  if(idx<0) return;
+  m.position.set((idx&7)-3.5, -3.98, ((idx>>3)&7)-3.5);
+  if(rgb) m.material.color.setRGB(rgb[0],rgb[1],rgb[2]);
+}
+
+/* colores */
+const COLORES={
+  naranja:{on:[1,.45,.18],  halo:[.5,.17,.05],  css:'#FF6A2B',soft:'#FFB48A'},
+  rojo:   {on:[1,.2,.15],   halo:[.55,.06,.03], css:'#FF3B30',soft:'#FF9C94'},
+  verde:  {on:[.35,1,.4],   halo:[.08,.5,.12],  css:'#3DFF7A',soft:'#A8FFC2'},
+  azul:   {on:[.3,.55,1],   halo:[.06,.18,.55], css:'#4D9BFF',soft:'#A9CBFF'},
+  blanco: {on:[1,1,1],      halo:[.4,.42,.45],  css:'#F2F5F8',soft:'#FFFFFF'},
+};
+let col=COLORES.naranja, verApagados=true;
+const OFF=[.085,.105,.125], HOV=[.6,.95,1], HOVH=[.2,.5,.6];
+const brillo=new Float32Array(512);
+let hoverIdx=-1;
+/* SNAKE en pantalla: cabeza celeste y comida verde (magenta si los leds ya son verdes) */
+const COL_CABEZA={on:[.45,.92,1], halo:[.1,.38,.5]};
+const COL_COMIDA={on:[.4,1,.45], halo:[.08,.5,.12]}, COL_COMIDA_2={on:[1,.35,.8], halo:[.5,.08,.35]};
+const colComida=()=> col===COLORES.verde ? COL_COMIDA_2 : COL_COMIDA;
+
+function pintar(){
+  for(let i=0;i<512;i++){
+    const j=i*3, b=brillo[i];
+    if(i===hoverIdx){
+      colCore[j]=HOV[0]; colCore[j+1]=HOV[1]; colCore[j+2]=HOV[2];
+      colHalo[j]=HOVH[0]; colHalo[j+1]=HOVH[1]; colHalo[j+2]=HOVH[2];
+    }else if(b>0.02){
+      const c = i===cabezaIdx ? COL_CABEZA : (i===comidaIdx ? colComida() : col);
+      colCore[j]  =OFF[0]+(c.on[0]-OFF[0])*b;
+      colCore[j+1]=OFF[1]+(c.on[1]-OFF[1])*b;
+      colCore[j+2]=OFF[2]+(c.on[2]-OFF[2])*b;
+      colHalo[j]=c.halo[0]*b; colHalo[j+1]=c.halo[1]*b; colHalo[j+2]=c.halo[2]*b;
+    }else if(verApagados){
+      colCore[j]=OFF[0]; colCore[j+1]=OFF[1]; colCore[j+2]=OFF[2];
+      colHalo[j]=colHalo[j+1]=colHalo[j+2]=0;
+    }else{
+      colCore[j]=colCore[j+1]=colCore[j+2]=0;
+      colHalo[j]=colHalo[j+1]=colHalo[j+2]=0;
+    }
+  }
+  attrCore.needsUpdate=true; attrHalo.needsUpdate=true;
+}
+
+/* ---- barrido (multiplexado) ---- */
+let barrido=false, msPiso=2, pisoActivo=0, acumPiso=0;
+const TAU=90;       /* persistencia del "ojo", ms */
+function actualizarBrillo(dt){
+  if(!barrido){
+    for(let i=0;i<512;i++) brillo[i]=(buf[i>>3]>>(i&7))&1;
+    return;
+  }
+  const dec=Math.exp(-dt/TAU);
+  for(let i=0;i<512;i++){ brillo[i]*=dec; }
+  acumPiso+=dt;
+  let pasos=Math.floor(acumPiso/msPiso); acumPiso-=pasos*msPiso;
+  if(pasos>=8){                       /* en este cuadro de pantalla pasaron todos los pisos */
+    for(let i=0;i<512;i++) if((buf[i>>3]>>(i&7))&1) brillo[i]=1;
+    pisoActivo=(pisoActivo+pasos)%8;
+  }else{
+    for(let k=0;k<pasos;k++){
+      pisoActivo=(pisoActivo+1)%8;
+      const base=pisoActivo*64;
+      for(let i=base;i<base+64;i++) if((buf[i>>3]>>(i&7))&1) brillo[i]=1;
+    }
+  }
+  const base=pisoActivo*64;           /* el piso activo está encendido ahora mismo */
+  for(let i=base;i<base+64;i++) if((buf[i>>3]>>(i&7))&1) brillo[i]=1;
+  for(let i=0;i<512;i++) if(((buf[i>>3]>>(i&7))&1) && brillo[i]<.08) brillo[i]=.08;   /* fantasma de lo que está en memoria */
+  pisoMesh.position.y=pisoActivo-3.5;
+}
+
+/* =====================================================================
+   3. Cámara: girar, desplazar, zoom, inercia, vistas
+   ===================================================================== */
+let yaw=.68, pitch=.30, dist=17;
+const target=new THREE.Vector3(0,0,0);
+let vyaw=0, vpitch=0, tw=null, giraSolo=false;
+/* distancia a la que el cubo (con sus ejes) cabe completo, según la forma del escenario */
+function distIdeal(){
+  const v=camera.fov*Math.PI/180, h=2*Math.atan(Math.tan(v/2)*camera.aspect);
+  return lim(6.3/Math.sin(Math.min(v,h)/2),12,40);
+}
+function camara(){
+  const cp=Math.cos(pitch);
+  camera.position.set(
+    target.x + dist*cp*Math.sin(yaw),
+    target.y + dist*Math.sin(pitch),
+    target.z + dist*cp*Math.cos(yaw)
+  );
+  camera.lookAt(target);
+}
+const VISTAS={
+  iso:   {yaw:.68,pitch:.30},
+  frente:{yaw:0,pitch:0},
+  lado:  {yaw:Math.PI/2,pitch:0},
+  arriba:{yaw:0,pitch:1.45},
+  juego: {yaw:.35,pitch:.55},    /* SNAKE: de frente, un poco a la derecha y desde arriba, para ver la profundidad */
+};
+function irA(o){
+  let y1=o.yaw??yaw; let d=y1-yaw; d=Math.atan2(Math.sin(d),Math.cos(d)); y1=yaw+d;
+  tw={t0:performance.now(),dur:420,
+      a:{yaw,pitch,dist,tx:target.x,ty:target.y,tz:target.z},
+      b:{yaw:y1,pitch:o.pitch??pitch,dist:o.dist??distIdeal(),tx:o.tx??0,ty:o.ty??0,tz:o.tz??0}};
+  vyaw=vpitch=0;
+}
+function reset(){ irA(VISTAS.iso); }
+function girar(dx,dy){ yaw+=dx*.007; pitch=lim(pitch+dy*.006,-1.5,1.5); }
+function desplazar(dx,dy){
+  camera.updateMatrixWorld();
+  const der=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0);
+  const arr=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
+  const k=2*dist*Math.tan(camera.fov*Math.PI/360)/Math.max(1,stage.clientHeight);   /* 1 px = 1 px */
+  target.addScaledVector(der,-dx*k);
+  target.addScaledVector(arr,dy*k);
+  target.set(lim(target.x,-7,7), lim(target.y,-7,7), lim(target.z,-7,7));
+}
+function zoom(factor){ dist=lim(dist*factor,5.5,50); }
+
+/* ---- punteros: mouse + táctil unificados ---- */
+const pts=new Map();
+let pinch0=0, mid0=null, tapT=0, downX=0, downY=0, moved=false, lastMoveT=0, modoToque='esfera';
+const plano=new THREE.Plane(), ray=new THREE.Raycaster(), v2=new THREE.Vector2();
+ray.params.Points.threshold=.32;
+function ndc(e){
+  const r=stage.getBoundingClientRect();
+  v2.x=((e.clientX-r.left)/r.width)*2-1;
+  v2.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(v2,camera);
+}
+function aCubo(e){
+  ndc(e);
+  plano.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(),new THREE.Vector3(0,0,0));
+  const p=new THREE.Vector3();
+  if(!ray.ray.intersectPlane(plano,p)) return null;
+  return {x:p.x+3.5, y:p.z+3.5, z:p.y+3.5};
+}
+function ledBajo(e){
+  ndc(e);
+  const h=ray.intersectObject(pCore,false);
+  return h.length ? h[0].index : -1;
+}
+function agarrar(e){
+  const p=aCubo(e);
+  if(p){ agarrado=true; obj.x=lim(p.x,1.2,5.8); obj.y=lim(p.y,1.2,5.8); obj.z=lim(p.z,1.2,6.8); obj.vx=obj.vy=obj.vz=0; }
+}
+stage.addEventListener('contextmenu',e=>e.preventDefault());
+stage.addEventListener('pointerdown',e=>{
+  if(e.target.closest('button')) return;
+  stage.focus({preventScroll:true});
+  stage.setPointerCapture(e.pointerId);
+  let modo='girar';
+  if(e.pointerType==='mouse'){
+    if(e.button===1||e.button===2) modo=(seq===TOCAR)?'girar':'mover';
+    else if(e.shiftKey) modo='mover';
+    else if(seq===TOCAR && modoToque==='esfera') modo='esfera';
+  }else{
+    if(seq===TOCAR && modoToque==='esfera') modo='esfera';
+  }
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY,modo});
+  downX=e.clientX; downY=e.clientY; moved=false; vyaw=vpitch=0; tw=null;
+  if(modo==='esfera' && pts.size===1) agarrar(e);
+  if(pts.size===2){
+    agarrado=false;
+    const a=[...pts.values()];
+    pinch0=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
+    mid0={x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2};
+  }
+  stage.classList.toggle('moviendo',modo==='mover');
+  stage.classList.toggle('arrastrando',modo!=='mover');
+  ocultarTip();
+  e.preventDefault();
+});
+stage.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId)){
+    if(e.pointerType==='mouse') hover(e);
+    return;
+  }
+  const prev=pts.get(e.pointerId);
+  const p={x:e.clientX,y:e.clientY,modo:prev.modo};
+  pts.set(e.pointerId,p);
+  if(Math.hypot(e.clientX-downX,e.clientY-downY)>5) moved=true;
+  if(pts.size===1){
+    const dx=e.clientX-prev.x, dy=e.clientY-prev.y;
+    if(prev.modo==='esfera' && agarrado){
+      const q=aCubo(e);
+      if(q){
+        obj.vx=(lim(q.x,1.2,5.8)-obj.x)*.5;
+        obj.vy=(lim(q.y,1.2,5.8)-obj.y)*.5;
+        obj.vz=(lim(q.z,1.2,6.8)-obj.z)*.5;
+        obj.x=lim(q.x,1.2,5.8); obj.y=lim(q.y,1.2,5.8); obj.z=lim(q.z,1.2,6.8);
+      }
+    }else if(prev.modo==='mover'){
+      desplazar(dx,dy);
+    }else{
+      girar(dx,dy);
+      vyaw=dx*.007; vpitch=dy*.006; lastMoveT=performance.now();
+    }
+  }else if(pts.size>=2){
+    const a=[...pts.values()];
+    const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
+    const mid={x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2};
+    if(pinch0>0 && d>0) zoom(pinch0/d);
+    if(mid0) desplazar(mid.x-mid0.x, mid.y-mid0.y);
+    pinch0=d; mid0=mid;
+  }
+});
+function suelta(e){
+  const p=pts.get(e.pointerId);
+  pts.delete(e.pointerId);
+  if(pts.size<2){ pinch0=0; mid0=null; }
+  if(pts.size===0){
+    agarrado=false;
+    stage.classList.remove('moviendo','arrastrando');
+    if(!moved && e.type==='pointerup'){
+      if(seq===DIB){ const i=ledBajo(e); if(i>=0) alternarLed(i); }
+      if(e.pointerType!=='mouse' && seq!==DIB){
+        const t=Date.now();
+        if(t-tapT<320){ reset(); tapT=0; } else tapT=t;
+      }
+    }
+    if(!(p && p.modo==='girar' && performance.now()-lastMoveT<70)){ vyaw=vpitch=0; }
+  }
+}
+stage.addEventListener('pointerup',suelta);
+stage.addEventListener('pointercancel',suelta);
+stage.addEventListener('dblclick',e=>{ if(e.target.closest('button')) return; if(seq!==DIB) reset(); });
+stage.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const d=(e.deltaMode===1?16:(e.deltaMode===2?400:1))*e.deltaY;
+  zoom(Math.exp(lim(d,-120,120)*.0014));
+  tw=null;
+},{passive:false});
+stage.addEventListener('pointerleave',ocultarTip);
+
+/* ---- cableado físico (cubo de William, contrato del 10/09) ---- */
+const PIN_COL=[["PD0","PD1","PD2","PD3","PD4","PD5","PD6","PD7"],["PG0","PG1","PG2","PG3","PG4","PG5","PG8","PG9"],
+               ["PC6","PC7","PC8","PC9","PC10","PC11","PC12","PB15"],["PB1","PB2","PB3","PB4","PB5","PB6","PB10","PB11"],
+               ["PE0","PE1","PE2","PE3","PE4","PE5","PE6","PE7"],["PE8","PE9","PE10","PE11","PE12","PE13","PE14","PE15"],
+               ["PF0","PF1","PF2","PF3","PF4","PF5","PF6","PF7"],["PF8","PF9","PF10","PF11","PF12","PF13","PF14","PF15"]];
+const PIN_PISO=["PG12","PG10","PD15","PD14","PD13","PD12","PD11","PD10"];   /* z0 (abajo) = MOSFET 8 … z7 (arriba) = MOSFET 1 */
+const ORD=n=>n+".ª";
+function fisico(x,y,z){
+  const tarjeta=y<4?1:2, banco=(y%4)+1;
+  return `tira y=${y} (columna ${x+1} de William) → baquela ${tarjeta}, banco ${banco}: A${x+1} pin ${2+x} → B${x+1} pin ${18-x} · STM <b>${PIN_COL[y][x]}</b>`+
+         `<br>piso z=${z}: tierra → pata central del MOSFET ${8-z} · U9 A${8-z} pin ${9-z} · STM <b>${PIN_PISO[z]}</b>`;
+}
+
+/* ---- tooltip de coordenadas ---- */
+const tip=$('tip');
+function hover(e){
+  const i=ledBajo(e);
+  if(i<0){ ocultarTip(); return; }
+  hoverIdx=i;
+  const x=i&7, y=(i>>3)&7, z=i>>6, on=(buf[z*8+y]>>x)&1;
+  tip.innerHTML=`<b>x=${x}</b> y=${y} z=${z} &nbsp;·&nbsp; cubo[${z}][${y}] bit ${x} = ${on}`
+               +'<br><span style="color:#8D9BA8">'+fisico(x,y,z)+'</span>'
+               +(seq===DIB?'<br><span style="color:#77858F">clic para '+(on?'apagar':'encender')+'</span>':'');
+  const r=stage.getBoundingClientRect();
+  let tx=e.clientX-r.left+14, ty=e.clientY-r.top+14;
+  tip.style.display='block';
+  if(tx+tip.offsetWidth>r.width-8) tx=e.clientX-r.left-tip.offsetWidth-10;
+  if(ty+tip.offsetHeight>r.height-8) ty=e.clientY-r.top-tip.offsetHeight-10;
+  tip.style.left=tx+'px'; tip.style.top=ty+'px';
+}
+function ocultarTip(){ hoverIdx=-1; tip.style.display='none'; }
+
+/* =====================================================================
+   4. Interfaz
+   ===================================================================== */
+let seq=0, frame=0, mostrado=0, corriendo=true, periodo=140, ultimo=0;
+
+/* botones de secuencia */
+function botonSeq(i,padre,extra){
+  const b=document.createElement('button');
+  b.innerHTML=(i<N_TALLER?`<i>${i+1}</i>`:'')+NOMBRES[i];
+  b.setAttribute('aria-pressed',i===0);
+  if(extra) b.className=extra;
+  b.onclick=()=>elegir(i); padre.appendChild(b); return b;
+}
+const botones=[];
+for(let i=0;i<N_TALLER;i++) botones.push(botonSeq(i,$('seqsTaller')));
+for(let i=N_TALLER;i<DIB;i++) botones.push(botonSeq(i,$('seqsExtra')));
+botones.push(botonSeq(DIB,$('seqsTuya'),'ancho'));
+
+/* ---- SNAKE jugado por ti: teclas relativas a la cámara ----
+   Las direcciones no son ejes fijos: "alejarse" es hacia adentro de la pantalla, "derecha" es a tu derecha.
+   La cámara se redondea al lado más cercano del cubo (0, 90, 180 o 270 grados), así una tecla siempre es un
+   eje exacto. Con la vista de juego (de frente) coincide con el cubo físico visto de frente. */
+const LADOS=[{ad:[0,-1], de:[1,0],  nom:'el frente'},       /* cámara del lado y7 */
+             {ad:[-1,0], de:[0,-1], nom:'la derecha'},      /* lado x7 */
+             {ad:[0,1],  de:[-1,0], nom:'atrás'},           /* lado y0 */
+             {ad:[1,0],  de:[0,1],  nom:'la izquierda'}];   /* lado x0 */
+function ladoCamara(){ const y=tw ? tw.b.yaw : yaw; return ((Math.round(y/(Math.PI/2))%4)+4)%4; }   /* si la cámara va girando, cuenta adonde llega */
+function vectorDe(a){
+  const L=LADOS[ladoCamara()];
+  switch(a){
+    case 'adelante': return [L.ad[0], L.ad[1], 0];
+    case 'atras':    return [-L.ad[0], -L.ad[1], 0];
+    case 'der':      return [L.de[0], L.de[1], 0];
+    case 'izq':      return [-L.de[0], -L.de[1], 0];
+    case 'sube':     return [0, 0, 1];
+    default:         return [0, 0, -1];
+  }
+}
+function vistaJuego(){ irA(VISTAS.juego); }
+/* una dirección pedida con el teclado o con los botones */
+function moverSnake(a){
+  if(auto){ auto=false; verAuto(); vistaJuego(); snakeReset(); }             /* mover = jugar tú */
+  else if(muerto){ if(performance.now()-muerteT<1000) return; snakeReset(); }  /* otra partida, con 1 s de gracia */
+  if(!corriendo) ponerPlay(true);
+  const v=vectorDe(a);
+  dirSnake(v[0],v[1],v[2]);
+  verLCD(); verHint(); verTick();
+}
+function textoCapSnake(){
+  return auto ? "Automático: la culebra busca la comida sola. Muévela con las flechas o WASD y juegas tú."
+              : "Juegas tú. Las teclas van según la cámara: ↑ la aleja de ti. Largo y récord en la LCD.";
+}
+
+/* pad del snake: mismas posiciones que las teclas Q W E / A S D */
+const pad=$('pad');
+const btAuto=document.createElement('button');
+btAuto.style.gridColumn='1/-1';
+btAuto.onclick=()=>{ auto=!auto; if(!auto) vistaJuego(); snakeReset(); verAuto(); verLCD(); verHint(); verTick(); };
+pad.appendChild(btAuto);
+function verAuto(){
+  btAuto.textContent = auto ? "AUTOMÁTICO — muévela con las flechas o WASD para jugar tú" : "JUEGAS TÚ — toca aquí para volver a automático";
+  btAuto.setAttribute('aria-pressed',!auto);
+  if(seq===SNAKE) $('cap').textContent=textoCapSnake();
+}
+[["Q ▼ bajar","baja"],["W ↑ alejar","adelante"],["E ▲ subir","sube"],
+ ["A ← izquierda","izq"],["S ↓ acercar","atras"],["D → derecha","der"]].forEach(([txt,a])=>{
+  const b=document.createElement('button');
+  b.textContent=txt;
+  b.onclick=()=>moverSnake(a);
+  pad.appendChild(b);
+});
+verAuto();
+
+/* LCD y leds de la tarjeta */
+const p2=n=>String(Math.min(n,99)).padStart(2,"0");
+let lcdActual=['',''];                           /* lo que muestra la LCD; también se le manda al cubo */
+function verLCD(){
+  let l1,l2;
+  if(seq===SNAKE){
+    if(auto){
+      l1="SNAKE  INTENTO "+Math.min(vidas+1,9);
+      l2="BOLAS "+p2(sn.length)+" COME "+p2(comidas);
+    }else if(muerto){
+      l1=(nuevoRecord?"NUEVO RECORD ":"FIN   LARGO  ")+p2(sn.length);
+      l2="ENTER: OTRA VEZ";
+    }else if(esperando){
+      l1="SNAKE 3D  REC "+p2(record);
+      l2="MUEVE PARA JUGAR";
+    }else if(!corriendo){
+      l1="PAUSA";
+      l2="P PARA SEGUIR";
+    }else{
+      l1="SNAKE 3D  REC "+p2(Math.max(record,sn.length));
+      l2="LARGO "+p2(sn.length)+" COME "+p2(comidas);
+    }
+  }else if(seq===DIB){
+    l1="TALLER PROPIO";
+    l2="CUADRO "+(cIdx+1)+"/"+cuadros.length;
+  }else{
+    if(seq<N_TALLER) l1="SECUENCIA "+(seq+1)+"/5";
+    else if(seq===TOCAR) l1="MODO LIBRE";
+    else l1="EXTRA";
+    l2=NOMBRES[seq];
+  }
+  const t=l1.padEnd(16).slice(0,16)+"\n"+l2.padEnd(16).slice(0,16);
+  lcdActual=[l1,l2];
+  $('lcd').textContent=t; $('lcdmini').textContent=t;
+}
+function verLeds(){
+  const n=seq<N_TALLER?seq+1:0;
+  $('ld1').classList.toggle('on',!!(n&1));
+  $('ld2').classList.toggle('on',!!(n&2));
+  $('ld3').classList.toggle('on',!!(n&4));
+}
+function pulsador(){
+  const b=$('b1'); b.classList.add('presionado'); setTimeout(()=>b.classList.remove('presionado'),120);
+  const ex=$('exti'); ex.classList.add('on'); setTimeout(()=>ex.classList.remove('on'),650);
+  elegir(seq<N_TALLER ? (seq+1)%N_TALLER : 0);
+}
+$('b1').onclick=pulsador;
+let cicloId=null;
+$('ciclo').onchange=e=>{
+  if(cicloId){ clearInterval(cicloId); cicloId=null; }
+  if(e.target.checked) cicloId=setInterval(pulsador,8000);
+};
+
+function verHint(){
+  const fino=matchMedia('(pointer:fine)').matches;
+  let h;
+  stage.classList.toggle('jugando', seq===SNAKE && !auto);
+  if(seq===SNAKE){
+    if(auto) h = fino ? "muévela con las flechas o WASD para jugar tú · arrastra: girar · rueda: zoom"
+                      : "toca una dirección abajo para jugar tú · 1 dedo: girar · 2 dedos: zoom";
+    else h = (fino ? "flechas o WASD: mover (↑ aleja) · E/Espacio sube · Q/Shift baja · P pausa · Enter otra vez"
+                   : "botones de abajo para mover · 1 dedo: girar")
+           + " · vista desde "+LADOS[ladoCamara()].nom;
+    $('hint').textContent=h;
+    return;
+  }
+  if(fino){
+    if(seq===TOCAR) h=(modoToque==='esfera'?"arrastra: mover la esfera · botón derecho: girar":"arrastra: girar")+" · shift+arrastra: desplazar · rueda: zoom";
+    else if(seq===DIB) h="clic en un led: encender / apagar · arrastra: girar · shift+arrastra: desplazar · rueda: zoom";
+    else h="arrastra: girar · shift+arrastra o botón derecho: desplazar · rueda: zoom · doble clic: centrar";
+  }else{
+    if(seq===TOCAR) h="1 dedo: "+(modoToque==='esfera'?"mover la esfera":"girar")+" · 2 dedos: zoom y desplazar";
+    else if(seq===DIB) h="toca un led: encender / apagar · 1 dedo: girar · 2 dedos: zoom y desplazar";
+    else h="1 dedo: girar · 2 dedos: zoom y desplazar · doble toque: centrar";
+  }
+  $('hint').textContent=h;
+}
+function verToque(){ $('btToque').textContent=(matchMedia('(pointer:fine)').matches?'arrastrar: ':'un dedo: ')+modoToque; }
+$('btToque').onclick=()=>{ modoToque=modoToque==='esfera'?'girar':'esfera'; verToque(); verHint(); };
+verToque();
+$('btCentrar').onclick=reset;
+$('btFull').onclick=()=>{
+  if(document.fullscreenElement) document.exitFullscreen();
+  else if(stage.requestFullscreen) stage.requestFullscreen();
+};
+document.addEventListener('fullscreenchange',()=>{ $('btFull').innerHTML=document.fullscreenElement?'&#x2716;':'&#x26F6;'; });
+
+function verTick(){
+  let t;
+  if(seq===SNAKE) t = auto ? "comidas "+comidas : "largo "+sn.length+" · récord "+Math.max(record,sn.length);
+  else if(seq===TOCAR) t="libre";
+  else if(seq===DIB) t="cuadro "+(cIdx+1)+"/"+cuadros.length;
+  else t="f "+mostrado+" · "+periodo+" ms";
+  $('tick').textContent=t;
+}
+function verVelocidad(){ $('speed').title=periodo+" ms por cuadro"; verTick(); }
+
+function elegir(i){
+  seq=i; frame=0; mostrado=0; gotas=[]; ultimo=0;
+  botones.forEach((b,j)=>b.setAttribute('aria-pressed',j===i));
+  pad.classList.toggle('on',i===SNAKE);
+  $('editor').classList.toggle('on',i===DIB);
+  $('rejilla').classList.toggle('edita',i===DIB);
+  $('btToque').classList.toggle('on',i===TOCAR);
+  $('cap').textContent = i===SNAKE
+    ? textoCapSnake()
+    : i===DIB ? "Pinta los leds en la pestaña Nivel o con clic en la vista 3D; el código sale en Código."
+    : "Así se va a ver la LCD 16x2 en esta secuencia.";
+  if(i===TOCAR){ obj.x=3.5; obj.y=3.5; obj.z=6.5; obj.vx=obj.vy=obj.vz=0; }
+  if(i===SNAKE) snakeReset();
+  if(i===DIB){ dibujo(); if(document.querySelector('.tabs button[aria-selected="true"]').dataset.tab==='vista') tab('nivel'); }
+  verCodigo(); verHint(); verLCD(); verLeds(); verTick(); verEditor();
+}
+
+/* transporte */
+const play=$('play');
+function ponerPlay(v){
+  corriendo=v;
+  play.innerHTML=corriendo?"&#10074;&#10074;":"&#9654;";
+  play.setAttribute('aria-label',corriendo?"Pausar":"Reproducir");
+  if(seq===SNAKE) verLCD();                    /* la LCD dice PAUSA */
+}
+play.onclick=()=>ponerPlay(!corriendo);
+function paso(dir){
+  if(seq===TOCAR) return;
+  ponerPlay(false);
+  if(seq===SNAKE){ if(dir>0) snakeTick(); return; }
+  if(seq===DIB){ cIdx=(cIdx+dir+cuadros.length)%cuadros.length; dibujo(); verEditor(); verLCD(); verTick(); return; }
+  if(dir<0) frame=Math.max(0,frame-2);
+  SECUENCIAS[seq](frame); mostrado=frame; frame++; verTick();
+}
+$('atras').onclick=()=>paso(-1);
+$('adelante').onclick=()=>paso(1);
+$('speed').oninput=e=>{ periodo=440-(+e.target.value); verVelocidad(); };
+verVelocidad();
+
+/* pestañas */
+function tab(n){
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===n));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+n));
+}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+
+/* vista */
+document.querySelectorAll('[data-vista]').forEach(b=>b.onclick=()=>irA(VISTAS[b.dataset.vista]));
+$('color').onchange=e=>{
+  col=COLORES[e.target.value];
+  document.documentElement.style.setProperty('--led',col.css);
+  document.documentElement.style.setProperty('--led-soft',col.soft);
+  pisoMesh.material.color.set(col.css);
+};
+$('ejes').onchange=e=>{ ejes.visible=e.target.checked; $('leyenda').style.display=e.target.checked?'':'none'; };
+$('apagados').onchange=e=>{
+  verApagados=e.target.checked;
+  matCore.blending = verApagados ? THREE.NormalBlending : THREE.AdditiveBlending;
+  matCore.needsUpdate=true;
+};
+$('giraSolo').onchange=e=>giraSolo=e.target.checked;
+$('barrido').onchange=e=>ponerBarrido(e.target.checked);
+function ponerBarrido(v){
+  barrido=v; $('barrido').checked=v; pisoMesh.visible=v; acumPiso=0;
+  if(!v) $('lectBarrido').textContent='activa el barrido para ver cómo se refresca el cubo';
+}
+$('msPiso').oninput=e=>{
+  msPiso=2*Math.pow(250,(+e.target.value)/100);
+  const hz=1000/(8*msPiso);
+  $('msPisoVal').textContent=(msPiso<10?msPiso.toFixed(1):Math.round(msPiso))+" ms · "+(hz<1?hz.toFixed(2):hz.toFixed(hz<10?1:0))+" Hz";
+};
+let lectCache='';
+function verLecturaBarrido(){
+  if(!barrido || !$('pane-vista').classList.contains('on')) return;
+  let cols='';
+  for(let y=0;y<8;y++) cols+=' '+buf[pisoActivo*8+y].toString(16).toUpperCase().padStart(2,'0');
+  const hz=1000/(8*msPiso), clave=pisoActivo+cols+msPiso;
+  if(clave===lectCache) return; lectCache=clave;
+  $('lectBarrido').innerHTML=
+    `piso activo  z=<b>${pisoActivo}</b>   pisos = 0b${(1<<pisoActivo).toString(2).padStart(8,'0')}\n`+
+    `columnas[z]  =${cols}\n`+
+    `refresco     = ${hz<10?hz.toFixed(1):Math.round(hz)} Hz`+(hz<45?'  ← el ojo ya ve parpadeo':'');
+}
+
+/* ---- nivel / editor ---- */
+const rej=$('rejilla'), celdas=[];
+(function(){
+  const niv=$('niveles');
+  for(let z=0;z<8;z++){
+    const b=document.createElement('button'); b.textContent='z'+z; b.setAttribute('aria-pressed',z===0);
+    b.onclick=()=>{ nivelSel=z; [...niv.children].forEach((c,k)=>c.setAttribute('aria-pressed',k===z)); nivelCache=-1; verPisoInfo(); };
+    niv.appendChild(b);
+  }
+  verPisoInfo();
+})();
+function verPisoInfo(){
+  const z=nivelSel;
+  $('pisoInfo').innerHTML=`Piso z=${z}: tierra → pata central del MOSFET ${8-z} → U9 A${8-z} (pin ${9-z}) → STM <b>${PIN_PISO[z]}</b>. Cada fila y de la rejilla es una tira; cada columna x es el número de William menos uno.`;
+}
+(function(){
+  const esq=document.createElement('div'); esq.className='esq'; esq.textContent='y\\x'; rej.appendChild(esq);
+  for(let x=0;x<8;x++){ const c=document.createElement('div'); c.className='cab'; c.textContent=x; rej.appendChild(c); }
+  for(let y=7;y>=0;y--){
+    const cy=document.createElement('div'); cy.className='cy'; cy.textContent=y; rej.appendChild(cy);
+    for(let x=0;x<8;x++){
+      const c=document.createElement('div'); c.className='celda'; c.dataset.x=x; c.dataset.y=y;
+      rej.appendChild(c); celdas[y*8+x]=c;
+    }
+  }
+})();
+let pintando=null;
+function bitNivel(x,y){ return (cuadros[cIdx][nivelSel*8+y]>>x)&1; }
+function ponerBit(x,y,v){
+  if(v) cuadros[cIdx][nivelSel*8+y] |= (1<<x); else cuadros[cIdx][nivelSel*8+y] &= ~(1<<x);
+  cambioCuadros();
+}
+function alternarLed(i){
+  const x=i&7, y=(i>>3)&7, z=i>>6;
+  cuadros[cIdx][z*8+y] ^= (1<<x); cambioCuadros();
+}
+rej.addEventListener('pointerdown',e=>{
+  if(seq!==DIB) return;
+  const c=e.target.closest('.celda'); if(!c) return;
+  e.preventDefault();
+  pintando = bitNivel(+c.dataset.x,+c.dataset.y) ? 0 : 1;
+  ponerBit(+c.dataset.x,+c.dataset.y,pintando);
+});
+rej.addEventListener('pointermove',e=>{
+  if(pintando===null) return;
+  const el=document.elementFromPoint(e.clientX,e.clientY);
+  const c=el&&el.closest?el.closest('.celda'):null;
+  if(c && bitNivel(+c.dataset.x,+c.dataset.y)!==pintando) ponerBit(+c.dataset.x,+c.dataset.y,pintando);
+});
+addEventListener('pointerup',()=>pintando=null);
+addEventListener('pointercancel',()=>pintando=null);
+
+let nivelCache=-1; const nivelBytes=new Uint8Array(8).fill(255); let nivelPiso=-2;
+function verNivel(){
+  if(!$('pane-nivel').classList.contains('on')) return;
+  let igual = nivelCache===nivelSel;
+  for(let y=0;y<8;y++) if(buf[nivelSel*8+y]!==nivelBytes[y]) igual=false;
+  if(!igual){
+    nivelCache=nivelSel;
+    for(let y=0;y<8;y++){ const fila=buf[nivelSel*8+y]; nivelBytes[y]=fila;
+      for(let x=0;x<8;x++) celdas[y*8+x].classList.toggle('on',!!((fila>>x)&1)); }
+  }
+  const activo=barrido && pisoActivo===nivelSel, marca=activo?1:0;
+  if(marca!==nivelPiso){ nivelPiso=marca; celdas.forEach(c=>c.classList.toggle('piso',activo)); }
+}
+function cambioCuadros(){ if(seq===DIB) dibujo(); verCodigo(); verEditor(); verLCD(); verTick(); }
+function verEditor(){ $('cNum').textContent=(cIdx+1)+' / '+cuadros.length; }
+$('cAnt').onclick=()=>{ cIdx=(cIdx-1+cuadros.length)%cuadros.length; cambioCuadros(); };
+$('cSig').onclick=()=>{ cIdx=(cIdx+1)%cuadros.length; cambioCuadros(); };
+$('cNuevo').onclick=()=>{ cuadros.splice(cIdx+1,0,new Uint8Array(64)); cIdx++; cambioCuadros(); };
+$('cDup').onclick=()=>{ cuadros.splice(cIdx+1,0,cuadros[cIdx].slice()); cIdx++; cambioCuadros(); };
+$('cBorrar').onclick=()=>{ if(cuadros.length===1){ cuadros[0].fill(0); } else { cuadros.splice(cIdx,1); cIdx=Math.min(cIdx,cuadros.length-1); } cambioCuadros(); };
+$('hLimpiarN').onclick=()=>{ for(let y=0;y<8;y++) cuadros[cIdx][nivelSel*8+y]=0; cambioCuadros(); };
+$('hLlenarN').onclick=()=>{ for(let y=0;y<8;y++) cuadros[cIdx][nivelSel*8+y]=0xFF; cambioCuadros(); };
+$('hInvertirN').onclick=()=>{ for(let y=0;y<8;y++) cuadros[cIdx][nivelSel*8+y]^=0xFF; cambioCuadros(); };
+$('hSubir').onclick=()=>{ if(nivelSel<7){ for(let y=0;y<8;y++) cuadros[cIdx][(nivelSel+1)*8+y]=cuadros[cIdx][nivelSel*8+y]; cambioCuadros(); } };
+$('hLimpiarC').onclick=()=>{ cuadros[cIdx].fill(0); cambioCuadros(); };
+$('hCopiar').onclick=()=>copiar(codigoDibujo(),$('hCopiar'));
+$('hImportar').onclick=()=>{ $('imp').classList.toggle('on'); $('impMsg').textContent=''; };
+$('impNo').onclick=()=>$('imp').classList.remove('on');
+$('impOk').onclick=()=>{
+  let txt=$('impTxt').value;
+  const k=txt.indexOf('CUADROS');                     /* si pegaron el archivo completo, leer solo el arreglo */
+  if(k>=0){ txt=txt.slice(k); const fin=txt.indexOf('};'); if(fin>=0) txt=txt.slice(0,fin); }
+  const bytes=(txt.match(/0x[0-9a-fA-F]{1,2}/g)||[]).map(s=>parseInt(s,16));
+  if(!bytes.length || bytes.length%64){ $('impMsg').textContent='se esperaban múltiplos de 64 bytes (leí '+bytes.length+')'; return; }
+  cuadros=[]; for(let k=0;k<bytes.length;k+=64) cuadros.push(Uint8Array.from(bytes.slice(k,k+64)));
+  cIdx=0; $('imp').classList.remove('on'); cambioCuadros();
+  $('impMsg').textContent='';
+};
+function hex(b){ return '0x'+b.toString(16).toUpperCase().padStart(2,'0'); }
+function codigoDibujo(){
+  const n=cuadros.length;
+  let s=COMUN+
+  "/* Cuadros pintados en el simulador: "+n+(n===1?" cuadro":" cuadros")+".\n"+
+  "   Cada cuadro es cubo[nivel][fila]: un byte por fila y un bit\n"+
+  "   por columna (bit 0 = x0 ... bit 7 = x7).                 */\n\n"+
+  "#define N_CUADROS "+n+"\n\n"+
+  "const uint8_t CUADROS[N_CUADROS][8][8] = {\n";
+  cuadros.forEach((c,k)=>{
+    s+="    { /* cuadro "+(k+1)+" */\n";
+    for(let z=0;z<8;z++){
+      s+="        {";
+      for(let y=0;y<8;y++) s+=hex(c[z*8+y])+(y<7?",":"");
+      s+="}"+(z<7?",":" ")+"  /* nivel z="+z+" */\n";
+    }
+    s+="    }"+(k<n-1?",":"")+"\n";
+  });
+  s+="};\n\n"+
+  "void Dibujo(uint32_t f){\n"+
+  "    uint8_t z, y;\n"+
+  "    const uint8_t (*c)[8] = CUADROS[f % N_CUADROS];\n"+
+  "    for(z=0; z<8; z++)\n"+
+  "        for(y=0; y<8; y++)\n"+
+  "            cubo[z][y] = c[z][y];\n"+
+  "}";
+  return s;
+}
+function verCodigo(){ $('code').textContent = seq===DIB ? codigoDibujo() : CODIGO[seq]; }
+function copiar(txt,bt){
+  const ok=()=>{ const m=$('copiadoMsg'); m.textContent='copiado ✓'; if(bt){ const o=bt.textContent; bt.textContent='copiado ✓'; setTimeout(()=>bt.textContent=o,1200); } setTimeout(()=>m.textContent='',1500); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok,()=>copiarViejo(txt,ok));
+  else copiarViejo(txt,ok);
+}
+function copiarViejo(txt,ok){
+  const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); ok(); }catch(e){} document.body.removeChild(ta);
+}
+$('copiarCod').onclick=()=>copiar($('code').textContent);
+
+/* ---- memoria hex ---- */
+const hexCeldas=[], hexFilas=[];
+(function(){
+  const h=$('hex');
+  const cab=document.createElement('div'); cab.className='r cab';
+  cab.innerHTML='<span>cubo[z][y]</span>'+[0,1,2,3,4,5,6,7].map(y=>'<span class="b">y'+y+'</span>').join('');
+  h.appendChild(cab);
+  for(let z=0;z<8;z++){
+    const r=document.createElement('div'); r.className='r';
+    r.innerHTML='<span class="z">cubo['+z+']</span>';
+    for(let y=0;y<8;y++){ const s=document.createElement('span'); s.className='b'; s.textContent='00'; r.appendChild(s); hexCeldas[z*8+y]=s; }
+    h.appendChild(r); hexFilas.push(r);
+  }
+})();
+const hexCache=new Uint8Array(64).fill(255); let hexPiso=-1;
+function verHex(){
+  if(!$('pane-mem').classList.contains('on')) return;
+  for(let i=0;i<64;i++){
+    if(buf[i]!==hexCache[i]){
+      hexCache[i]=buf[i];
+      hexCeldas[i].textContent=buf[i].toString(16).toUpperCase().padStart(2,'0');
+      hexCeldas[i].classList.toggle('on',buf[i]!==0);
+    }
+  }
+  const p=barrido?pisoActivo:-1;
+  if(p!==hexPiso){ hexPiso=p; hexFilas.forEach((r,z)=>r.classList.toggle('piso',z===p)); }
+}
+
+/* ---- teclado ---- */
+document.addEventListener('mousedown',e=>{ if(e.target.closest('button')) e.preventDefault(); });   /* los botones no roban el foco al mouse */
+/* SNAKE: se lee la tecla física (e.code), así WASD queda igual en cualquier distribución de teclado */
+const TECLAS_SNAKE={ArrowUp:'adelante', KeyW:'adelante', ArrowDown:'atras', KeyS:'atras',
+                    ArrowLeft:'izq', KeyA:'izq', ArrowRight:'der', KeyD:'der',
+                    KeyE:'sube', Space:'sube', PageUp:'sube',
+                    KeyQ:'baja', ShiftLeft:'baja', ShiftRight:'baja', PageDown:'baja'};
+/* si la ventana pierde el foco (otra ventana, otra pestaña) el teclado ya no llega: pausar antes de que se estrelle */
+addEventListener('blur',()=>{ if(seq===SNAKE && !auto && !esperando && !muerto && corriendo) ponerPlay(false); });
+function teclaSnake(e){
+  if(e.ctrlKey||e.metaKey||e.altKey) return false;      /* nunca tapar atajos del navegador (Ctrl+W cierra la pestaña) */
+  const a=TECLAS_SNAKE[e.code], t=e.target;
+  if(a){
+    e.preventDefault();
+    if(t && t!==document.body && t!==stage && t.blur) t.blur();   /* que Espacio no marque una casilla ni pulse un botón */
+    if(!e.repeat) moverSnake(a);                         /* dejar la tecla apretada no repite */
+    return true;
+  }
+  if(auto) return false;
+  if(e.code==='KeyP'||e.code==='Escape'){ e.preventDefault(); if(!e.repeat && !muerto && !esperando) ponerPlay(!corriendo); return true; }
+  if(e.code==='Enter'||e.code==='NumpadEnter'){ e.preventDefault(); if(muerto){ snakeReset(); verLCD(); verHint(); verTick(); } return true; }
+  return false;
+}
+addEventListener('keydown',e=>{
+  const t=e.target, tag=(t.tagName||'').toLowerCase(), tipo=(t.type||'').toLowerCase();
+  if(tag==='textarea'||tag==='select'||t.isContentEditable) return;
+  if(seq===SNAKE && teclaSnake(e)) return;             /* el juego va primero */
+  if(tag==='input'){
+    if(tipo==='range'){ if(/^(Arrow|Home|End|Page)/.test(e.key)) return; }        /* el deslizador se queda con sus flechas, el resto son atajos */
+    else if(tipo==='checkbox'){ if(e.key===' ') return; }
+    else return;
+  }
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  const pasoG=.09, pasoM=28;
+  switch(e.key){
+    case 'ArrowLeft':  e.shiftKey?desplazar(-pasoM,0):girar(-14,0); tw=null; break;
+    case 'ArrowRight': e.shiftKey?desplazar(pasoM,0):girar(14,0);   tw=null; break;
+    case 'ArrowUp':    e.shiftKey?desplazar(0,-pasoM):girar(0,-12); tw=null; break;
+    case 'ArrowDown':  e.shiftKey?desplazar(0,pasoM):girar(0,12);   tw=null; break;
+    case '+': case '=': zoom(1/1.12); break;
+    case '-': case '_': zoom(1.12); break;
+    case 'r': case 'R': reset(); break;
+    case ' ': ponerPlay(!corriendo); break;
+    case ',': paso(-1); break;
+    case '.': paso(1); break;
+    case 'b': case 'B': pulsador(); break;
+    case 'd': case 'D': elegir(DIB); break;
+    case 'm': case 'M': ponerBarrido(!barrido); break;
+    case 'f': case 'F': $('btFull').click(); break;
+    default:
+      if(/^[0-9]$/.test(e.key)){ const i=e.key==='0'?9:(+e.key-1); if(i<NOMBRES.length) elegir(i); break; }
+      return;
+  }
+  e.preventDefault();
+});
+
+/* =====================================================================
+   5. Bucle principal
+   ===================================================================== */
+let tPrev=0, fpsN=0, fpsT=0, ladoVisto=-1, avisoTxt='';
+/* velocidad jugando tú: con el deslizador en su lugar arranca en 378 ms por paso y cada comida la sube un 3 %,
+   hasta 168 ms. El deslizador escala todo (más lento a la izquierda). */
+const pasoSnake=()=> auto ? periodo*0.5 : Math.max(periodo*1.2, periodo*2.7*Math.pow(0.97,comidas));
+function verAviso(){
+  let s='';
+  if(seq===SNAKE && !auto){
+    if(muerto) s = performance.now()-muerteT<440 ? '' : (nuevoRecord?'¡Nuevo récord! ':'')+'Largo '+sn.length+' · Enter para otra vez';
+    else if(esperando) s='Muévela con las flechas o WASD para empezar';
+    else if(!corriendo) s='Pausa · P para seguir';
+  }
+  if(s!==avisoTxt){ avisoTxt=s; const a=$('aviso'); a.textContent=s; a.style.display=s?'block':'none'; }
+}
+function bucle(t){
+  requestAnimationFrame(bucle);
+  const dt=lim(t-tPrev||16,1,100); tPrev=t;
+
+  cabezaIdx=comidaIdx=-1;
+  if(seq===SNAKE){
+    if(corriendo && !esperando && t-tickJuego > pasoSnake()){ tickJuego=t; snakeTick(); verTick(); }
+    snakeDibuja(t);
+    if(!auto){ const L=ladoCamara(); if(L!==ladoVisto){ ladoVisto=L; verHint(); } }
+  }else if(seq===TOCAR){
+    if(t-ultimo>33){ ultimo=t; tocar(); }
+  }else if(seq===DIB){
+    if(corriendo && cuadros.length>1 && t-ultimo>periodo){ ultimo=t; cIdx=(cIdx+1)%cuadros.length; verEditor(); verLCD(); verTick(); }
+    dibujo();
+  }else{
+    if(corriendo && t-ultimo>periodo){ ultimo=t; SECUENCIAS[seq](frame); mostrado=frame; frame++; verTick(); }
+  }
+  enlaceTick(t);
+  ponerSombra(sombraCabeza,cabezaIdx); ponerSombra(sombraComida,comidaIdx,colComida().on);
+  verAviso();
+  actualizarBrillo(dt); pintar(); verNivel(); verHex(); verLecturaBarrido();
+
+  if(tw){
+    let k=(t-tw.t0)/tw.dur; if(k>=1) k=1;
+    const e=1-Math.pow(1-k,3), a=tw.a, b=tw.b;
+    yaw=a.yaw+(b.yaw-a.yaw)*e; pitch=a.pitch+(b.pitch-a.pitch)*e; dist=a.dist+(b.dist-a.dist)*e;
+    target.set(a.tx+(b.tx-a.tx)*e, a.ty+(b.ty-a.ty)*e, a.tz+(b.tz-a.tz)*e);
+    if(k===1) tw=null;
+  }else if(pts.size===0){
+    if(Math.abs(vyaw)>1e-4||Math.abs(vpitch)>1e-4){ yaw+=vyaw; pitch=lim(pitch+vpitch,-1.5,1.5); vyaw*=.88; vpitch*=.88; }
+    if(giraSolo && !(seq===SNAKE && !auto)) yaw+=0.00028*dt;   /* jugando no gira: las teclas dependen de la cámara */
+  }
+  camara();
+  renderer.render(scene,camera);
+
+  fpsN++; if(t-fpsT>1000){ $('fps').textContent=fpsN+' fps'; fpsN=0; fpsT=t; }
+}
+
+/* =====================================================================
+   6. Código en C de cada secuencia (se muestra en la pestaña Código)
+   ===================================================================== */
+const COMUN =
+"/* Buffer del cubo: cubo[nivel][fila], cada bit = una columna */\n"+
+"uint8_t cubo[8][8];\n\n"+
+"void Limpiar(void){\n"+
+"    uint8_t z, y;\n"+
+"    for(z=0; z<8; z++)\n"+
+"        for(y=0; y<8; y++)\n"+
+"            cubo[z][y] = 0x00;\n"+
+"}\n\n"+
+"void Led(uint8_t x, uint8_t y, uint8_t z){\n"+
+"    cubo[z][y] |= (1<<x);\n"+
+"}\n\n"+
+"/* ---------------------------------------------------- */\n\n";
+
+const CODIGO=[
+COMUN+
+"void Planos(uint32_t f){\n"+
+"    uint8_t a, b, eje, s, p;\n"+
+"    Limpiar();\n"+
+"    f   = f % 48;\n"+
+"    eje = f / 16;                  /* 0=niveles 1=filas 2=columnas */\n"+
+"    s   = f % 16;\n"+
+"    p   = (s < 8) ? s : (15 - s);  /* va y vuelve */\n"+
+"    for(a=0; a<8; a++){\n"+
+"        for(b=0; b<8; b++){\n"+
+"            if(eje == 0)      Led(a, b, p);\n"+
+"            else if(eje == 1) Led(a, p, b);\n"+
+"            else              Led(p, a, b);\n"+
+"        }\n"+
+"    }\n"+
+"}",
+COMUN+
+"uint8_t gx[16], gy[16], gz[16];    /* posicion de cada gota */\n"+
+"uint8_t ngotas = 0;\n\n"+
+"void Lluvia(void){\n"+
+"    uint8_t i, j = 0;\n"+
+"    Limpiar();\n"+
+"    for(i=0; i<ngotas; i++){       /* bajar un nivel */\n"+
+"        if(gz[i] > 0){\n"+
+"            gz[i]--;\n"+
+"            gx[j] = gx[i];\n"+
+"            gy[j] = gy[i];\n"+
+"            gz[j] = gz[i];\n"+
+"            j++;\n"+
+"        }\n"+
+"    }\n"+
+"    ngotas = j;                    /* las que tocaron piso se borran */\n"+
+"    if(ngotas < 14){               /* nace una gota nueva arriba */\n"+
+"        gx[ngotas] = rand() % 8;\n"+
+"        gy[ngotas] = rand() % 8;\n"+
+"        gz[ngotas] = 7;\n"+
+"        ngotas++;\n"+
+"    }\n"+
+"    for(i=0; i<ngotas; i++) Led(gx[i], gy[i], gz[i]);\n"+
+"}",
+COMUN+
+"void Cubo(uint32_t f){\n"+
+"    const uint8_t tam[6] = {0, 1, 2, 3, 2, 1};\n"+
+"    uint8_t s, lo, hi, x, y, z;\n"+
+"    Limpiar();\n"+
+"    s  = tam[(f/2) % 6];           /* cada tamano dura 2 cuadros */\n"+
+"    lo = 3 - s;\n"+
+"    hi = 4 + s;\n"+
+"    for(x=lo; x<=hi; x++)\n"+
+"        for(y=lo; y<=hi; y++)\n"+
+"            for(z=lo; z<=hi; z++)\n"+
+"                if(x==lo || x==hi || y==lo ||\n"+
+"                   y==hi || z==lo || z==hi)  /* solo la cascara */\n"+
+"                    Led(x, y, z);\n"+
+"}",
+COMUN+
+"/* Las 28 casillas del borde, en orden, dando la vuelta */\n"+
+"const uint8_t PX[28] = {0,1,2,3,4,5,6,7, 7,7,7,7,7,7,7,\n"+
+"                        6,5,4,3,2,1,0, 0,0,0,0,0,0};\n"+
+"const uint8_t PY[28] = {0,0,0,0,0,0,0,0, 1,2,3,4,5,6,7,\n"+
+"                        7,7,7,7,7,7,7, 6,5,4,3,2,1};\n\n"+
+"void Espiral(uint32_t f){\n"+
+"    uint8_t z, i;\n"+
+"    Limpiar();\n"+
+"    for(z=0; z<8; z++){\n"+
+"        i = (f + z*3) % 28;        /* cada nivel corrido 3 casillas */\n"+
+"        Led(PX[i], PY[i], z);\n"+
+"    }\n"+
+"}",
+COMUN+
+"/* Un seno de 16 pasos, ya escalado de 0 a 7 */\n"+
+"const uint8_t SEN[16] = {4,5,6,7,7,7,6,5,4,2,1,0,0,0,1,2};\n\n"+
+"void Onda(uint32_t f){\n"+
+"    uint8_t x, y;\n"+
+"    Limpiar();\n"+
+"    for(x=0; x<8; x++)\n"+
+"        for(y=0; y<8; y++)\n"+
+"            Led(x, y, SEN[(x + y + f) & 15]);\n"+
+"}",
+COMUN+
+"/* Objeto esferico voxelizado. Aqui el cubo deja de ser una\n"+
+"   animacion fija y pasa a ser una PANTALLA de volumen: le\n"+
+"   das una posicion y el la dibuja. La posicion puede venir\n"+
+"   de un joystick, del ADC, o del PC por el puerto serial. */\n\n"+
+"void Esfera(int8_t cx, int8_t cy, int8_t cz, uint8_t r2){\n"+
+"    int8_t x, y, z, dx, dy, dz;\n"+
+"    Limpiar();\n"+
+"    for(x=0; x<8; x++){\n"+
+"        for(y=0; y<8; y++){\n"+
+"            for(z=0; z<8; z++){\n"+
+"                dx = x - cx;\n"+
+"                dy = y - cy;\n"+
+"                dz = z - cz;\n"+
+"                if((dx*dx + dy*dy + dz*dz) <= r2)\n"+
+"                    Led(x, y, z);\n"+
+"            }\n"+
+"        }\n"+
+"    }\n"+
+"}",
+"/* SNAKE 3D. Cada casilla se guarda como UN numero:\n"+
+"   casilla = z*64 + y*8 + x   (0 a 511)\n"+
+"   Necesita 6 pulsadores y un TIMER, porque el juego\n"+
+"   corre a 3 Hz mientras el barrido corre a 200 Hz.   */\n\n"+
+"uint16_t cola[512];\n"+
+"uint16_t largo = 3, comida;\n"+
+"int8_t   dx = 1, dy = 0, dz = 0;\n\n"+
+"void Direccion(int8_t nx, int8_t ny, int8_t nz){\n"+
+"    if(nx == -dx && ny == -dy && nz == -dz) return;  /* no reversa */\n"+
+"    dx = nx;  dy = ny;  dz = nz;\n"+
+"}\n\n"+
+"void Tick(void){\n"+
+"    int8_t x, y, z;\n"+
+"    uint16_t i, cab;\n\n"+
+"    x = cola[0] % 8;\n"+
+"    y = (cola[0] / 8) % 8;\n"+
+"    z = cola[0] / 64;\n"+
+"    x += dx;  y += dy;  z += dz;\n\n"+
+"    if(x<0 || x>7 || y<0 || y>7 || z<0 || z>7){ Muere(); return; }\n"+
+"    cab = z*64 + y*8 + x;\n\n"+
+"    for(i=0; i<largo-1; i++)\n"+
+"        if(cola[i] == cab){ Muere(); return; }   /* se mordio */\n\n"+
+"    for(i=largo; i>0; i--) cola[i] = cola[i-1];  /* correr el cuerpo */\n"+
+"    cola[0] = cab;\n\n"+
+"    if(cab == comida){ largo++; NuevaComida(); }\n"+
+"}\n\n"+
+"void Dibuja(uint32_t ms){\n"+
+"    uint16_t i, c;\n"+
+"    Limpiar();\n"+
+"    for(i=1; i<largo; i++){                      /* cuerpo: fijo */\n"+
+"        c = cola[i];\n"+
+"        Led(c%8, (c/8)%8, c/64);\n"+
+"    }\n"+
+"    if((ms/420) % 3){                            /* cabeza: lento */\n"+
+"        c = cola[0];\n"+
+"        Led(c%8, (c/8)%8, c/64);\n"+
+"    }\n"+
+"    if(((ms/110) & 1) == 0){                     /* comida: rapido */\n"+
+"        c = comida;\n"+
+"        Led(c%8, (c/8)%8, c/64);\n"+
+"    }\n"+
+"}",
+COMUN+
+"/* Pendulo de Newton: la bola de un extremo sube, baja y\n"+
+"   la del otro sale disparada. Las del medio quietas.    */\n\n"+
+"void Pendulo(uint32_t f){\n"+
+"    const uint8_t ARCO[10] = {0,1,2,3,4,4,3,2,1,0};\n"+
+"    uint8_t x, s, z, t;  int8_t lado = -1, h = 0;\n"+
+"    Limpiar();\n"+
+"    t = f % 40;\n"+
+"    if(t < 10)                { lado = 0; h = ARCO[t];      }\n"+
+"    else if(t >= 20 && t < 30){ lado = 7; h = ARCO[t - 20]; }\n"+
+"    for(x=0; x<8; x++){\n"+
+"        z = (x == lado) ? 1 + h : 1;\n"+
+"        for(s = z+2; s < 8; s++) Led(x, 3, s);   /* la cuerda */\n"+
+"        Led(x,3,z);   Led(x,4,z);                /* la bola   */\n"+
+"        Led(x,3,z+1); Led(x,4,z+1);\n"+
+"    }\n"+
+"}",
+COMUN+
+"/* Fuego: mientras mas alto el nivel, menos probable que\n"+
+"   prenda. Da el titileo de una llama en tres lineas.   */\n\n"+
+"void Fuego(void){\n"+
+"    uint8_t x, y, z;\n"+
+"    Limpiar();\n"+
+"    for(z=0; z<8; z++)\n"+
+"        for(y=0; y<8; y++)\n"+
+"            for(x=0; x<8; x++)\n"+
+"                if((rand() % 9) > (z + 1)) Led(x, y, z);\n"+
+"}",
+COMUN+
+"/* Onda esferica que sale del centro. Truco: como el centro\n"+
+"   cae en 3.5, se trabaja con coordenadas dobladas (2x-7)\n"+
+"   y asi no hay que usar decimales en ninguna parte.     */\n\n"+
+"void Esfera(uint32_t f){\n"+
+"    const uint16_t R4[6] = {4, 16, 36, 64, 100, 144};\n"+
+"    int16_t a, b, c, d;\n"+
+"    uint8_t x, y, z;\n"+
+"    uint16_t r4 = R4[f % 6];\n"+
+"    Limpiar();\n"+
+"    for(x=0; x<8; x++){\n"+
+"        for(y=0; y<8; y++){\n"+
+"            for(z=0; z<8; z++){\n"+
+"                a = 2*x - 7;  b = 2*y - 7;  c = 2*z - 7;\n"+
+"                d = a*a + b*b + c*c - r4;\n"+
+"                if(d < 0) d = -d;\n"+
+"                if(d <= 14) Led(x, y, z);   /* la cascara */\n"+
+"            }\n"+
+"        }\n"+
+"    }\n"+
+"}",
+COMUN+
+"/* Helice: una pared vertical que gira. Reusa la tabla del\n"+
+"   borde de la espiral, tomando dos puntos opuestos.     */\n\n"+
+"void Helice(uint32_t f){\n"+
+"    uint8_t i, j, k, z, x, y;\n"+
+"    Limpiar();\n"+
+"    i = f % 28;\n"+
+"    j = (i + 14) % 28;          /* el punto de enfrente */\n"+
+"    for(k=0; k<8; k++){\n"+
+"        x = (PX[i]*(7-k) + PX[j]*k + 3) / 7;\n"+
+"        y = (PY[i]*(7-k) + PY[j]*k + 3) / 7;\n"+
+"        for(z=0; z<8; z++) Led(x, y, z);\n"+
+"    }\n"+
+"}",
+COMUN+
+"/* Texto ECCI atravesando el cubo. Cada letra es un mapa\n"+
+"   de 8 bytes: un byte por fila, un bit por columna.    */\n\n"+
+"const uint8_t LETRA[4][8] = {\n"+
+"    {0x7E,0x60,0x60,0x7C,0x60,0x60,0x7E,0x00},   /* E */\n"+
+"    {0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00},   /* C */\n"+
+"    {0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00},   /* C */\n"+
+"    {0x3C,0x18,0x18,0x18,0x18,0x18,0x3C,0x00}    /* I */\n"+
+"};\n\n"+
+"void Texto(uint32_t f){\n"+
+"    uint8_t paso, li, r, x;  int8_t y;\n"+
+"    Limpiar();\n"+
+"    paso = f % 40;\n"+
+"    li   = paso / 10;           /* cual letra va */\n"+
+"    y    = 7 - (paso % 10);     /* que tan adentro va */\n"+
+"    if(y < 0) return;\n"+
+"    for(r=0; r<8; r++)\n"+
+"        for(x=0; x<8; x++)\n"+
+"            if((LETRA[li][r] >> (7-x)) & 1)\n"+
+"                Led(x, y, 7-r);\n"+
+"}"
+];
+
+/* =====================================================================
+   7. Enlace con el cubo físico (firmware CuboSerial.cpp)
+      Web Serial (Chrome o Edge) → ST-LINK, puerto COM virtual del cable de CN1 → USART3 del STM (PD8/PD9)
+      115200 baudios, 8N1.
+      PC → cubo:  A5 5A TIPO DATOS… XOR          XOR = TIPO ^ todos los DATOS
+                  TIPO 1 imagen: los 64 bytes de buf, que son cubo[z][y]          68 bytes
+                  TIPO 2 texto:  secuencia + 16 + 16 caracteres de la LCD         37 bytes
+      cubo → PC:  líneas de texto "CUBO LISTO", "B1", "ESTADO VIVO|LOCAL buenas malas"
+   ===================================================================== */
+const ENL={puerto:null, escritor:null, lector:null, lectura:null, ocupado:false,
+           img:new Uint8Array(64), tImg:-1e9, txt:'', tTxt:-1e9,
+           tAbre:0, tRx:0, modo:'', buenas:0, malas:0, tB1:-1e9, nota:''};
+const IMG_MIN_MS=20, IMG_LATIDO_MS=100, TXT_LATIDO_MS=2000;   /* ≤50 imágenes/s; latidos para que el cubo no suelte el modo en vivo */
+
+function trama(tipo,datos){
+  const t=new Uint8Array(datos.length+4);
+  let x=tipo;
+  t[0]=0xA5; t[1]=0x5A; t[2]=tipo;
+  for(let i=0;i<datos.length;i++){ t[3+i]=datos[i]; x^=datos[i]; }
+  t[t.length-1]=x;
+  return t;
+}
+const a16=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').padEnd(16).slice(0,16);
+function datosTexto(){
+  const d=new Uint8Array(33), s=a16(lcdActual[0])+a16(lcdActual[1]);
+  d[0]=seq;
+  for(let i=0;i<32;i++){ const c=s.charCodeAt(i); d[1+i]=(c>=32&&c<127)?c:32; }
+  return d;
+}
+/* Orientación del cubo físico respecto al simulador: primero cambia x↔y, después invierte.
+   Solo afecta la imagen que se manda; la vista 3D no cambia. Se recuerda en este navegador. */
+const ORI={xy:false, x:false, y:false, z:false};
+try{ Object.assign(ORI, JSON.parse(localStorage.getItem('cubo.orientacion')||'{}')); }catch(e){}
+function orientar(b){
+  if(!ORI.xy && !ORI.x && !ORI.y && !ORI.z) return b;
+  const o=new Uint8Array(64);
+  for(let z=0;z<8;z++) for(let y=0;y<8;y++){
+    const fila=b[z*8+y]; if(!fila) continue;
+    for(let x=0;x<8;x++) if((fila>>x)&1){
+      let X=x, Y=y, Z=z;
+      if(ORI.xy){ X=y; Y=x; }
+      if(ORI.x) X=7-X;
+      if(ORI.y) Y=7-Y;
+      if(ORI.z) Z=7-Z;
+      o[Z*8+Y] |= 1<<X;
+    }
+  }
+  return o;
+}
+[['oriXY','xy'],['oriX','x'],['oriY','y'],['oriZ','z']].forEach(([id,k])=>{
+  const c=$(id); c.checked=!!ORI[k];
+  c.onchange=()=>{ ORI[k]=c.checked; try{ localStorage.setItem('cubo.orientacion',JSON.stringify(ORI)); }catch(e){} };
+});
+/* se llama en cada cuadro de pantalla: manda la imagen si cambió (o cada 100 ms) y el texto si cambió (o cada 2 s) */
+function enlaceTick(t){
+  if(!ENL.escritor || ENL.ocupado) return;          /* nunca se encolan tramas: siempre sale la más reciente */
+  const partes=[];
+  const clave=seq+'|'+lcdActual[0]+'|'+lcdActual[1];
+  if(clave!==ENL.txt || t-ENL.tTxt>=TXT_LATIDO_MS){ ENL.txt=clave; ENL.tTxt=t; partes.push(trama(2,datosTexto())); }
+  const img=orientar(buf);
+  let distinta=false;
+  for(let i=0;i<64;i++) if(img[i]!==ENL.img[i]){ distinta=true; break; }
+  if((distinta && t-ENL.tImg>=IMG_MIN_MS) || t-ENL.tImg>=IMG_LATIDO_MS){ ENL.img.set(img); ENL.tImg=t; partes.push(trama(1,img)); }
+  if(!partes.length) return;
+  const todo=new Uint8Array(partes.reduce((n,p)=>n+p.length,0));
+  let k=0; for(const p of partes){ todo.set(p,k); k+=p.length; }
+  ENL.ocupado=true;
+  ENL.escritor.write(todo).then(()=>{ ENL.ocupado=false; },
+    e=>{ ENL.ocupado=false; cerrarEnlace('Se perdió el puerto al escribir ('+e.message+').'); });
+}
+function lineaCubo(l){
+  ENL.tRx=performance.now();
+  const p=l.split(/\s+/);
+  if(p[0]==='B1'){ ENL.tB1=ENL.tRx; pulsador(); }                              /* el B1 físico hace lo mismo que el de aquí */
+  else if(p[0]==='ESTADO'){ ENL.modo=p[1]||''; ENL.buenas=+p[2]||0; ENL.malas=+p[3]||0; }
+  else if(p[0]==='CUBO'){ ENL.tTxt=-1e9; ENL.tImg=-1e9; }                      /* el cubo se reinició: mandarle todo ya */
+}
+async function leerCubo(p){
+  const dec=new TextDecoder();
+  let resto='';
+  while(ENL.puerto===p && p.readable){
+    const lector=p.readable.getReader();
+    ENL.lector=lector;
+    try{
+      for(;;){
+        const {value,done}=await lector.read();
+        if(done) break;                                                  /* cancel() desde cerrarEnlace */
+        resto+=dec.decode(value,{stream:true});
+        let k;
+        while((k=resto.indexOf('\n'))>=0){
+          const l=resto.slice(0,k).trim(); resto=resto.slice(k+1);
+          if(l) lineaCubo(l);
+        }
+        if(resto.length>200) resto='';                                   /* basura sin fin de línea */
+      }
+    }catch(e){ /* error de línea (ruido): se pide otro lector; si fue el cable, readable queda en null */ }
+    finally{ lector.releaseLock(); if(ENL.lector===lector) ENL.lector=null; }
+  }
+  if(ENL.puerto===p){ ENL.lectura=null; cerrarEnlace('Se desconectó el cable USB.'); }
+}
+async function conectarCubo(){
+  let p;
+  try{ p=await navigator.serial.requestPort({filters:[{usbVendorId:0x0483}]}); }   /* 0x0483 = STMicroelectronics (ST-LINK) */
+  catch(e){ return; }                                                            /* cerró el selector sin elegir */
+  try{ await p.open({baudRate:115200}); }
+  catch(e){ ENL.nota='No se pudo abrir el puerto ('+e.message+'). ¿Lo tiene abierto otro programa: Keil, PuTTY, un monitor serie?'; verEnlace(); return; }
+  Object.assign(ENL,{puerto:p, escritor:p.writable.getWriter(), ocupado:false, tAbre:performance.now(), tRx:0,
+                     modo:'', txt:'', tTxt:-1e9, tImg:-1e9, nota:''});
+  ENL.lectura=leerCubo(p);
+  verEnlace();
+}
+async function cerrarEnlace(nota){
+  const p=ENL.puerto; if(!p) return;
+  const w=ENL.escritor, lect=ENL.lectura;
+  Object.assign(ENL,{puerto:null, escritor:null, lectura:null, modo:'', nota:nota||''});
+  try{ if(ENL.lector) await ENL.lector.cancel(); }catch(e){}
+  try{ if(lect) await lect; }catch(e){}
+  try{ if(w) w.releaseLock(); }catch(e){}
+  try{ await p.close(); }catch(e){}
+  verEnlace();
+}
+function verEnlace(){
+  const ahora=performance.now(), bt=$('btCubo');
+  let punto='', est, det;
+  if(!('serial' in navigator)){
+    est='Cubo físico: este navegador no tiene Web Serial';
+    det='Abre este archivo en Chrome o Edge de escritorio.';
+    bt.disabled=true;
+  }else if(!ENL.puerto){
+    est='Cubo físico: sin conectar';
+    det=ENL.nota || 'Cable USB en CN1 (ST-LINK) · 115200 baudios · firmware CuboSerial';
+    if(ENL.nota) punto='error';
+  }else if(!ENL.tRx || ahora-ENL.tRx>2500){
+    if(ahora-ENL.tAbre<3000){ punto='espera'; est='Cubo: puerto abierto, esperando respuesta…'; det='El cubo contesta una vez por segundo.'; }
+    else{ punto='error'; est='Cubo: el puerto está abierto pero el cubo no contesta';
+          det='¿Está grabado CuboSerial.bin? ¿Elegiste el puerto del ST-LINK? Prueba el RESET (botón negro).'; }
+  }else if(ENL.modo==='VIVO'){
+    punto='vivo'; est='Cubo en vivo';
+    det=ENL.buenas+' tramas/s · '+ENL.malas+' con error'+(ahora-ENL.tB1<2000?' · B1 del cubo ✓':'');
+  }else{
+    punto='espera'; est='Cubo conectado, corriendo sus secuencias';
+    det=document.hidden ? 'La pestaña está oculta: el navegador no dibuja, así que no hay imagen que mandar.'
+                        : 'Todavía no le llegan imágenes buenas ('+ENL.malas+' con error en el último segundo).';
+  }
+  $('enlPunto').className='punto'+(punto?' '+punto:'');
+  $('enlEstado').textContent=est; $('enlDetalle').textContent=det;
+  bt.textContent=ENL.puerto?'Desconectar':'Conectar cubo';
+  bt.setAttribute('aria-pressed',!!ENL.puerto);
+}
+$('btCubo').onclick=()=>{ if(ENL.puerto) cerrarEnlace(''); else conectarCubo(); };
+if('serial' in navigator) navigator.serial.addEventListener('disconnect',e=>{ if(e.target===ENL.puerto) cerrarEnlace('Se desconectó el cable USB.'); });
+setInterval(verEnlace,250);
+verEnlace();
+
+/* arranque */
+resize(); dist=distIdeal(); elegir(0); actualizarBrillo(16); pintar(); $('msPiso').oninput({target:$('msPiso')}); requestAnimationFrame(bucle);
+</script>
+</body>
+</html>

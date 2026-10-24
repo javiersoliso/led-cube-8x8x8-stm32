@@ -1,0 +1,48 @@
+# Compilación con Keil µVision
+Objects/
+Listings/
+RTE/
+DebugConfig/
+*.uvguix.*
+*.uvoptx
+*.axf
+*.htm
+*.lnp
+*.dep
+*.crf
+*.d
+*.o
+*.map
+*.sct
+*.build_log.htm
+build.log
+JLinkLog.txt
+
+# Compilación con arm-none-eabi-gcc (firmware/gcc/build.sh)
+firmware/gcc/build/
+firmware/gcc/cmsis/
+*.elf
+*.bin
+*.hex
+
+# STM32CubeIDE
+.settings/
+Debug/
+Release/
+*.launch
+
+# Secretos (no aplica a este proyecto, por si acaso)
+secrets.h
+redes.h
+.env
+
+# Asistentes y editores
+.claude/
+CLAUDE.md
+.vscode/
+.idea/
+
+# Sistema operativo
+Thumbs.db
+desktop.ini
+.DS_Store
